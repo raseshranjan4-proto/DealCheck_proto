@@ -42,11 +42,14 @@ deal-check/
         types.ts
         deno.json
   frontend/
-    supabase-data.js    # drop-in replacement for the window.storage reads in deal-check.html
+    deal-check.html     # approved Phase 1 build, wired to Supabase REST (single file)
     README.md
   scripts/
-    dry-run.ps1 / dry-run.sh   # invoke the deployed function with ?dry_run=1 (no DB writes)
+    dry-run.ps1 / .sh        # invoke the deployed function with ?dry_run=1 (no DB writes)
+    run.ps1 / .sh            # invoke it for real
+    deploy-frontend.ps1     # upload deal-check.html to Supabase Storage
   .env.example
+  DEPLOY.md
 ```
 
 ## Prerequisites
@@ -107,14 +110,14 @@ Two options — pick one:
   `select vault.create_secret('<SERVICE_ROLE_KEY>', 'daily_pipeline_token');`
   then `supabase db push`. Edit the cron time in the file before pushing.
 
-## Wiring the frontend
+## Frontend
 
-`deal-check.html` (the approved Phase 1 build, from claude.ai outputs — not in this repo)
-currently reads seed data from `window.storage`. Replace those reads with
-[`frontend/supabase-data.js`](frontend/supabase-data.js) — see
-[`frontend/README.md`](frontend/README.md). The DB column names already match the field
-names the UI expects, so it is a data-source swap only; **do not restyle** (section 7 of
-the spec is locked) and **do not re-add write UI** (RLS is select-only for the public).
+`frontend/deal-check.html` is already wired to the Supabase REST API (`loadDeals()` +
+`mapRow()` replacing the old `window.storage` seed reads). Remaining before it goes live:
+paste the **anon** key in place of `REPLACE_WITH_ANON_KEY`, then publish with
+`scripts/deploy-frontend.ps1`. Details in [`frontend/README.md`](frontend/README.md) and
+[`DEPLOY.md`](DEPLOY.md). **Do not restyle** (spec section 7 is locked) and **do not add
+write UI** (RLS is select-only for the public).
 
 ## Notes / decisions still open (from spec section 8)
 

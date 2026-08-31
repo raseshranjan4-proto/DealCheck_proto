@@ -1,35 +1,38 @@
-# Frontend wiring
+# Frontend
 
-The approved Phase 1 build — `deal-check.html`, a single self-contained file — lives in the
-claude.ai project outputs, not in this repo. The only Phase 2 change to it is swapping the
-data source from browser-local `window.storage` seed data to the live Supabase table.
+`deal-check.html` is the approved Phase 1 build (spec section 7 — locked styling), already
+wired to the live database. It stays a single self-contained file.
 
-## Steps
+## What was changed from the claude.ai version
 
-1. Copy `deal-check.html` into this folder (or edit it wherever it lives).
-2. Get the **anon / public** key from the Supabase Dashboard
-   (Project Settings → API → Project API keys → `anon`) and paste it into
-   [`supabase-data.js`](supabase-data.js) in place of `REPLACE_WITH_ANON_KEY`.
-3. In `deal-check.html`, find where it currently loads seed deals from `window.storage`
-   (the internal key is `dealwire_deals`). Replace that read with:
+- `loadDeals()` now does a `fetch` against the Supabase REST API instead of reading
+  `window.storage`.
+- Added `mapRow()` — Supabase columns (`primary_sector`, `deal_type`, `amount_display`,
+  `amount_usd_millions`, `announced_date`, `source_url`) are mapped to the flat field names
+  the table/stats/ticker already render against (`sector`, `type`, `amount`, `amountNum`,
+  `date`, `source`).
+- Removed `SEED_DEALS` and `saveDeals()` — the page is read-only and owns no data.
+- On a fetch failure the empty state shows a "couldn't load the registry" message instead
+  of silently falling back to fake data.
 
-   ```html
-   <script type="module">
-     import { loadDeals } from "./supabase-data.js";
-     // or paste the body of supabase-data.js inline to keep the file single-file
-     const deals = await loadDeals();
-     // ...hand `deals` to the existing render function unchanged
-   </script>
-   ```
+## Before it goes live — one edit
 
-   To keep it a single file, inline the contents of `supabase-data.js` into the page's
-   existing `<script>` instead of importing.
-4. Remove any code path that *writes* to `window.storage` — the page no longer owns the
-   data. Keep view-state (filters, sort, date range) in memory or `localStorage`; that is
-   per-viewer UI state, not deal data.
+Replace `REPLACE_WITH_ANON_KEY` near the top of the `<script>` with the project's
+**anon / public** key (Dashboard → Project Settings → API → Project API keys → `anon`).
+The key is public by design; RLS restricts it to `SELECT` on `deals`.
+
+## Publish
+
+Supabase Storage — see [`../DEPLOY.md`](../DEPLOY.md) stage 3, or:
+
+```bash
+$env:SUPABASE_SERVICE_ROLE_KEY = "..."
+pwsh ../scripts/deploy-frontend.ps1
+```
+
+Live URL: `https://nggfbjwpdggrezhtasys.supabase.co/storage/v1/object/public/site/deal-check.html`
 
 ## Do not
 
-- Restyle. Section 7 of the spec is locked (Inter + IBM Plex Mono for numerics, flat
-  ledger table, navy `#243B6B`, sector column blocks, ticker strip, mobile stacked cards).
-- Re-add manual add/edit/delete UI. Public access is select-only.
+- Restyle (spec section 7 is locked).
+- Add manual add/edit/delete UI — public access is `SELECT` only.

@@ -53,12 +53,12 @@ then `supabase db push` to apply `migrations/20260831000002_schedule_daily_pipel
 
 ## Stage 3 — Frontend on Supabase Storage
 
-1. Copy `deal-check.html` into `frontend/` (download it from the claude.ai Phase 1 chat).
-2. Paste the **anon** key into `frontend/supabase-data.js` (`REPLACE_WITH_ANON_KEY`).
-3. Wire `deal-check.html` to `loadDeals()` — see `frontend/README.md`. Keep it single-file
-   by inlining the `supabase-data.js` body; remove any `window.storage` writes.
-4. One-time: Dashboard → Storage → New bucket → name **`site`**, **Public** enabled.
-5. Upload:
+1. `frontend/deal-check.html` is already wired to the Supabase REST API (`loadDeals()` +
+   `mapRow()`; `window.storage` and `SEED_DEALS` removed).
+2. Paste the **anon** key into `frontend/deal-check.html` in place of
+   `REPLACE_WITH_ANON_KEY` (near the top of the `<script>`).
+3. One-time: Dashboard → Storage → New bucket → name **`site`**, **Public** enabled.
+4. Upload:
 
    ```bash
    $env:SUPABASE_SERVICE_ROLE_KEY = "..."
