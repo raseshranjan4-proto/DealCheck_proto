@@ -215,7 +215,7 @@ const TYPES = { VC:'VC Round', MA:'M&A', PE:'PE / Buyout', SPAC:'SPAC / Listing'
 
 // ---- Live data source: Supabase REST. The anon key is public and, via RLS, read-only. ----
 const SUPABASE_URL = 'https://nggfbjwpdggrezhtasys.supabase.co';
-const SUPABASE_ANON_KEY = 'REPLACE_WITH_ANON_KEY';
+const SUPABASE_ANON_KEY = 'sb_publishable_0ZNTg07ktaS4vFy2J4tKfg_PhpJZghH';
 
 let deals = [];
 let activeSector = 'all';
@@ -225,7 +225,7 @@ async function loadDeals(){
   try{
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/deals?select=*&order=announced_date.desc.nullslast,created_at.desc`,
-      { headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}` } }
+      { headers:{ apikey:SUPABASE_ANON_KEY } }
     );
     if(!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
     deals = (await res.json()).map(mapRow);
