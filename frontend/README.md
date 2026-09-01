@@ -15,19 +15,19 @@ wired to the live database. It stays a single self-contained file.
 - On a fetch failure the empty state shows a "couldn't load the registry" message instead
   of silently falling back to fake data.
 
-## Before it goes live — one edit
+## Key
 
-Replace `REPLACE_WITH_ANON_KEY` near the top of the `<script>` with the project's
-**anon / public** key (Dashboard → Project Settings → API → Project API keys → `anon`).
-The key is public by design; RLS restricts it to `SELECT` on `deals`.
+`SUPABASE_ANON_KEY` near the top of the `<script>` holds the project's publishable key
+(`sb_publishable_…`), sent via the `apikey` header. It is public by design; RLS restricts
+it to `SELECT` on `deals`. Swap it only if the key is rotated.
 
 ## Publish
 
 Supabase Storage — see [`../DEPLOY.md`](../DEPLOY.md) stage 3, or:
 
-```bash
+```powershell
 $env:SUPABASE_SERVICE_ROLE_KEY = "..."
-pwsh ../scripts/deploy-frontend.ps1
+powershell -ExecutionPolicy Bypass -File ..\scripts\deploy-frontend.ps1
 ```
 
 Live URL: `https://nggfbjwpdggrezhtasys.supabase.co/storage/v1/object/public/site/deal-check.html`

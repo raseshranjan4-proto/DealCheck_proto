@@ -1,40 +1,46 @@
 # Deploy checklist — from repo to live app
 
 Ordered. Each stage ends with a checkpoint you can verify.
+This machine has **Windows PowerShell 5.1** (`powershell`, not `pwsh`) and the
+**Supabase CLI 2.x** already installed.
 
-## Inputs you need first
+## Inputs you need
 
-- **Anthropic API key** with billing on — https://console.anthropic.com/settings/keys
-- **Supabase database password** — Dashboard → Project Settings → Database
-- **Supabase service_role key** and **anon key** — Dashboard → Project Settings → API
-- Supabase CLI: `npm i -g supabase` (Node is available on this machine), or `npx supabase ...`
+- **Anthropic API key** with billing on — https://console.anthropic.com/settings/keys _(outstanding)_
+- ~~Supabase database password~~ — used, project linked
+- **service_role key** (legacy `eyJ...` JWT) — Dashboard → Settings → API Keys → "JWT-based keys (legacy)"
 
 ---
 
 ## Stage 1 — Pipeline live
 
-```bash
-cd deal-check
-supabase login
-supabase link --project-ref nggfbjwpdggrezhtasys      # prompts for DB password
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...      # you run this — it is a secret
-supabase functions deploy daily-pipeline
+- [x] `supabase login`
+- [x] `supabase link --project-ref nggfbjwpdggrezhtasys`
+- [x] `supabase functions deploy daily-pipeline` — deployed, `verify_jwt` on, unauthenticated call returns 401, authenticated call runs
+- [ ] `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` — **blocked on the API key**
+- [ ] dry run, then real run
+
+Once the key is set, watch logs in another terminal
+(`supabase functions logs daily-pipeline`) and run:
+
+```powershell
+$env:SUPABASE_SERVICE_ROLE_KEY = "eyJ...service_role..."
+
+# dry run — fetch + extract, logs what it would write, no DB changes
+powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1
+
+# real run
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
 ```
 
-Dry run (no writes), watching logs in another terminal (`supabase functions logs daily-pipeline`):
+Or skip the scripts entirely — the raw call:
 
-```bash
-$env:SUPABASE_SERVICE_ROLE_KEY = "..."
-pwsh ./scripts/dry-run.ps1
+```powershell
+curl.exe -sS -X POST "https://nggfbjwpdggrezhtasys.supabase.co/functions/v1/daily-pipeline?dry_run=1" -H "Authorization: Bearer $env:SUPABASE_SERVICE_ROLE_KEY" -H "Content-Type: application/json" -d "{}"
 ```
+(drop `?dry_run=1` for the real run)
 
-Real run:
-
-```bash
-pwsh ./scripts/run.ps1
-```
-
-**✅ Checkpoint:** Dashboard → Table Editor → `deals` has rows. `run.ps1` returned
+**✅ Checkpoint:** Dashboard → Table Editor → `deals` has rows; the response is
 `"ok": true` with non-zero `inserted`.
 
 ---
@@ -53,16 +59,16 @@ then `supabase db push` to apply `migrations/20260831000002_schedule_daily_pipel
 
 ## Stage 3 — Frontend on Supabase Storage
 
-1. `frontend/deal-check.html` is already wired to the Supabase REST API (`loadDeals()` +
+1. [x] `frontend/deal-check.html` wired to the Supabase REST API (`loadDeals()` +
    `mapRow()`; `window.storage` and `SEED_DEALS` removed).
-2. Paste the **anon** key into `frontend/deal-check.html` in place of
-   `REPLACE_WITH_ANON_KEY` (near the top of the `<script>`).
-3. One-time: Dashboard → Storage → New bucket → name **`site`**, **Public** enabled.
-4. Upload:
+2. [x] Publishable key (`sb_publishable_…`) set in `frontend/deal-check.html`; Data API
+   enabled, `public` schema exposed, `GET /rest/v1/deals` returns `[]`.
+3. [ ] One-time: Dashboard → Storage → New bucket → name **`site`**, **Public** enabled.
+4. [ ] Upload:
 
-   ```bash
-   $env:SUPABASE_SERVICE_ROLE_KEY = "..."
-   pwsh ./scripts/deploy-frontend.ps1
+   ```powershell
+   $env:SUPABASE_SERVICE_ROLE_KEY = "eyJ...service_role..."
+   powershell -ExecutionPolicy Bypass -File .\scripts\deploy-frontend.ps1
    ```
 
 **Live URL:**

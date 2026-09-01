@@ -54,16 +54,16 @@ deal-check/
 
 ## Prerequisites
 
-- **Supabase CLI** — not installed on this machine. Install:
-  `scoop install supabase` (or see https://supabase.com/docs/guides/cli). Needed to deploy
-  the function and push migrations.
+- **Supabase CLI 2.x** — installed (`supabase --version`). Reinstall with `npm i -g supabase`.
 - **Deno** — optional, only for `supabase functions serve` (fully local runs). The Supabase
   CLI bundles its own Deno for deploys, so you can skip this for deploy-only.
-- **An Anthropic API key** — https://console.anthropic.com/settings/keys
+- **An Anthropic API key** with billing on — https://console.anthropic.com/settings/keys
 - Access to Supabase project **`nggfbjwpdggrezhtasys`** (`raseshranjan4-proto's Project`,
   ap-southeast-2).
 
 ## Setup
+
+Progress so far: `login` ✅ · `link` ✅ · `functions deploy` ✅ · secret + first run ⬜
 
 ```bash
 # 1. from this folder
@@ -82,11 +82,14 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 # 4. deploy
 supabase functions deploy daily-pipeline
+```
 
-# 5. dry run (fetches + extracts, logs what it *would* write, no DB changes)
-#    needs the service-role key because the function keeps verify_jwt on:
-SUPABASE_SERVICE_ROLE_KEY=... ./scripts/dry-run.sh
-#    or, Windows:  pwsh ./scripts/dry-run.ps1
+```powershell
+# 5. dry run (fetches + extracts, logs what it *would* write, no DB changes).
+#    Needs the service-role key because the function keeps verify_jwt on.
+#    This machine has Windows PowerShell 5.1 (powershell, not pwsh):
+$env:SUPABASE_SERVICE_ROLE_KEY = "eyJ...service_role..."
+powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1
 ```
 
 Watch logs while it runs: `supabase functions logs daily-pipeline`.
