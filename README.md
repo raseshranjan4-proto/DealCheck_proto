@@ -1,8 +1,9 @@
 # Deal-Check — Phase 2 (automated daily pipeline)
 
-Backend for [Deal-Check](../deal-check-context1.md): a public tracker for global M&A/VC/PE
-deals in deep tech, AI, quantum, and DeFi. Phase 1 (the UI) is finalised in claude.ai.
-This project is Phase 2 — the deployed backend that fills the database every day.
+Backend + published page for [Deal-Check](../deal-check-context1.md): a public tracker for
+global M&A/VC/PE deals in deep tech, AI, quantum, and DeFi. Phase 1 (the UI) was finalised
+in claude.ai. This project is Phase 2 — the deployed pipeline that fills the database every
+day, plus the page that reads it.
 
 **Spec of record:** [`../deal-check-context1.md`](../deal-check-context1.md) (supersedes
 `../deal-check-context.md`). Read it before changing pipeline behaviour — the taxonomy,
@@ -11,15 +12,16 @@ dedup rules, extraction prompt, and RLS model are all locked there.
 ## What runs
 
 ```
-cron (daily)  ->  daily-pipeline Edge Function
-                    1. fetch 6 RSS feeds
-                    2. layer-1 dedup   (processed_articles.article_url)
-                    3. extract         (Claude Haiku 4.5, tool-call schema, cached system prompt)
-                    4. validate        (required fields, enum checks, no inferred numbers)
-                    5. layer-2 dedup   (company + primary_sector + announced_date within 7 days)
-                    6. insert / update / discard into  public.deals
-                    7. always record the article in  public.processed_articles
-frontend  ->  reads public.deals via the Supabase REST API (anon key, RLS select-only)
+cron (daily, 06:15 UTC)  ->  daily-pipeline Edge Function
+                              1. fetch 6 RSS feeds
+                              2. layer-1 dedup   (processed_articles.article_url)
+                              3. extract         (Claude Haiku 4.5, tool-call schema)
+                              4. validate        (required fields, enum checks, no inferred numbers)
+                              5. layer-2 dedup   (company + primary_sector + announced_date within 7 days)
+                              6. insert / update / discard into  public.deals
+                              7. always record the article in  public.processed_articles
+GitHub Pages  ->  docs/index.html reads public.deals via the Supabase REST API
+                  (publishable key, RLS select-only)
 ```
 
 ## Layout
@@ -27,104 +29,78 @@ frontend  ->  reads public.deals via the Supabase REST API (anon key, RLS select
 ```
 deal-check/
   supabase/
-    config.toml
+    config.toml                                    # project_id + verify_jwt for the function
     migrations/
-      20260831000001_initial_schema.sql          # deals + processed_articles + RLS (mirrors live DB)
-      20260831000002_schedule_daily_pipeline.sql  # pg_cron + pg_net daily trigger (opt-in)
-    functions/
-      daily-pipeline/
-        index.ts        # orchestrator / HTTP handler
-        sources.ts      # the 6 RSS feeds
-        rss.ts          # fetch + parse + URL normalisation
-        anthropic.ts    # extraction call (tool-call structured output + prompt cache)
-        validate.ts     # extraction -> DealRow, or reject with a reason
-        dedup.ts        # layer 1 + layer 2
-        types.ts
-        deno.json
-  frontend/
-    deal-check.html     # approved Phase 1 build, wired to Supabase REST (single file)
-    README.md
+      20260831000001_initial_schema.sql            # deals + processed_articles + RLS (mirrors live DB)
+      20260831000002_schedule_daily_pipeline.sql   # pg_cron + pg_net daily trigger (opt-in)
+    functions/daily-pipeline/
+      index.ts        # orchestrator / HTTP handler; ?dry_run=1 skips writes
+      sources.ts      # the 6 RSS feeds
+      rss.ts          # fetch + parse + URL normalisation
+      anthropic.ts    # extraction call (Haiku 4.5, tool-call structured output)
+      validate.ts     # extraction -> DealRow, or reject with a reason
+      dedup.ts        # layer 1 + layer 2
+      types.ts / deno.json
+  docs/
+    index.html        # the published page (Phase 1 UI, wired to Supabase REST) — served by GitHub Pages
   scripts/
-    dry-run.ps1 / .sh        # invoke the deployed function with ?dry_run=1 (no DB writes)
-    run.ps1 / .sh            # invoke it for real
-    deploy-frontend.ps1     # upload deal-check.html to Supabase Storage
+    dry-run.ps1 / .sh   # invoke the function with ?dry_run=1 (no DB writes)
+    run.ps1 / .sh       # invoke it for real
   .env.example
-  DEPLOY.md
+  DEPLOY.md            # step-by-step deploy state + remaining steps
 ```
 
-## Prerequisites
+## Current state
 
-- **Supabase CLI 2.x** — installed (`supabase --version`). Reinstall with `npm i -g supabase`.
-- **Deno** — optional, only for `supabase functions serve` (fully local runs). The Supabase
-  CLI bundles its own Deno for deploys, so you can skip this for deploy-only.
-- **An Anthropic API key** with billing on — https://console.anthropic.com/settings/keys
-- Access to Supabase project **`nggfbjwpdggrezhtasys`** (`raseshranjan4-proto's Project`,
-  ap-southeast-2).
+| | |
+|---|---|
+| Edge Function deployed, `verify_jwt` on | ✅ |
+| `ANTHROPIC_API_KEY` + `PIPELINE_MAX_ARTICLES_PER_RUN=25` secrets set | ✅ |
+| Dry run clean, real run inserted rows into `deals` | ✅ |
+| GitHub repo `raseshranjan4-proto/DealCheck_proto` | ✅ |
+| Daily cron | ⬜ |
+| GitHub Pages publish (`/docs`) | ⬜ |
 
-## Setup
+See [`DEPLOY.md`](DEPLOY.md) for the exact remaining steps.
 
-Progress so far: `login` ✅ · `link` ✅ · `functions deploy` ✅ · secret + first run ⬜
+## Re-running the pipeline
 
-```bash
-# 1. from this folder
-supabase login
-supabase link --project-ref nggfbjwpdggrezhtasys
-
-# 2. the schema is already live in the linked project (tables exist, RLS on, 0 rows).
-#    Only run this against a fresh/local DB — the migration is idempotent but you do not
-#    need it for the existing project:
-# supabase db push
-
-# 3. secrets for the Edge Function
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-#    SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected into the function
-#    automatically by the platform — do not set them yourself.
-
-# 4. deploy
-supabase functions deploy daily-pipeline
-```
+service_role secret from Dashboard → Settings → API Keys → "JWT-based keys (legacy)":
 
 ```powershell
-# 5. dry run (fetches + extracts, logs what it *would* write, no DB changes).
-#    Needs the service-role key because the function keeps verify_jwt on.
-#    This machine has Windows PowerShell 5.1 (powershell, not pwsh):
 $env:SUPABASE_SERVICE_ROLE_KEY = "eyJ...service_role..."
-powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1   # no writes
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1       # writes
 ```
 
-Watch logs while it runs: `supabase functions logs daily-pipeline`.
-
-A successful run returns JSON like:
+Successful response shape:
 
 ```json
-{ "ok": true, "ms": 41230, "fetched": 118, "new_articles": 47,
-  "extracted_deals": 9, "inserted": 7, "updated": 1, "discarded": 1,
-  "invalid": 0, "errors": 0, "dry_run": false }
+{ "ok": true, "ms": 41230, "fetched": 118, "new_articles": 22,
+  "extracted_deals": 5, "inserted": 4, "updated": 1, "discarded": 0,
+  "invalid": 0, "errors": 0, "dry_run": false, "error_samples": [] }
 ```
 
-## Scheduling the daily run
+Logs: Dashboard → Edge Functions → `daily-pipeline` → Logs (the CLI has no `functions logs`
+subcommand in 2.x).
 
-Two options — pick one:
+## Frontend notes
 
-- **Dashboard:** Project → Edge Functions → `daily-pipeline` → Schedules → add
-  `15 6 * * *` (06:15 UTC). Simplest.
-- **Migration:** `20260831000002_schedule_daily_pipeline.sql` sets up the same thing via
-  `pg_cron` + `pg_net`. It reads the function's bearer token from Supabase Vault, so first:
-  `select vault.create_secret('<SERVICE_ROLE_KEY>', 'daily_pipeline_token');`
-  then `supabase db push`. Edit the cron time in the file before pushing.
+`docs/index.html` is the approved Phase 1 build (spec §7 — **locked styling, no write UI**),
+changed only where it read data:
 
-## Frontend
+- `loadDeals()` does a `fetch` against `…/rest/v1/deals` instead of `window.storage`.
+- `mapRow()` maps DB columns (`primary_sector`, `deal_type`, `amount_display`,
+  `amount_usd_millions`, `announced_date`, `source_url`) to the flat field names the
+  table/stats/ticker render against.
+- `SEED_DEALS` and `saveDeals()` removed; fetch failure shows an error empty-state.
+- `SUPABASE_ANON_KEY` holds the publishable key (`sb_publishable_…`), public by design.
 
-`frontend/deal-check.html` is already wired to the Supabase REST API (`loadDeals()` +
-`mapRow()` replacing the old `window.storage` seed reads). Remaining before it goes live:
-paste the **anon** key in place of `REPLACE_WITH_ANON_KEY`, then publish with
-`scripts/deploy-frontend.ps1`. Details in [`frontend/README.md`](frontend/README.md) and
-[`DEPLOY.md`](DEPLOY.md). **Do not restyle** (spec section 7 is locked) and **do not add
-write UI** (RLS is select-only for the public).
+**Not Supabase Storage:** public Storage objects are served with
+`Content-Security-Policy: default-src 'none'; sandbox`, which disables all JS/CSS/fetch and
+is not configurable. GitHub Pages serves the file correctly.
 
-## Notes / decisions still open (from spec section 8)
+## Open decisions (spec §8)
 
-- Real hosting/domain for the public page — decide after a few clean manual runs.
-- `verify_jwt` is left **on** for the function so it is not an open endpoint; cron and the
-  dry-run scripts pass the service-role key. Flip it in `supabase/config.toml` only if you
-  add a lighter-weight auth path.
+- Custom domain for the Pages URL — optional.
+- `verify_jwt` stays **on**; the cron sends the project anon key, which satisfies it.

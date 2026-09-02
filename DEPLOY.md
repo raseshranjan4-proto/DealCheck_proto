@@ -1,95 +1,97 @@
 # Deploy checklist — from repo to live app
 
-Ordered. Each stage ends with a checkpoint you can verify.
 This machine has **Windows PowerShell 5.1** (`powershell`, not `pwsh`) and the
-**Supabase CLI 2.x** already installed.
+**Supabase CLI 2.x** installed.
 
-## Inputs you need
+## Status
 
-- **Anthropic API key** with billing on — https://console.anthropic.com/settings/keys _(outstanding)_
-- ~~Supabase database password~~ — used, project linked
-- **service_role key** (legacy `eyJ...` JWT) — Dashboard → Settings → API Keys → "JWT-based keys (legacy)"
+| Stage | State |
+|---|---|
+| 1 — Pipeline deployed + verified (dry run + real run, rows in `deals`) | ✅ done |
+| 4 — GitHub repo (`raseshranjan4-proto/DealCheck_proto`) | ✅ done (a few commits to push) |
+| 2 — Daily cron | ⬜ pending |
+| 3 — Frontend on **GitHub Pages** | ⬜ pending (Supabase Storage rejected — see below) |
 
 ---
 
-## Stage 1 — Pipeline live
+## Stage 1 — Pipeline live ✅
 
-- [x] `supabase login`
-- [x] `supabase link --project-ref nggfbjwpdggrezhtasys`
-- [x] `supabase functions deploy daily-pipeline` — deployed, `verify_jwt` on, unauthenticated call returns 401, authenticated call runs
-- [ ] `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` — **blocked on the API key**
-- [ ] dry run, then real run
+- [x] `supabase login` / `supabase link --project-ref nggfbjwpdggrezhtasys`
+- [x] `supabase functions deploy daily-pipeline` — `verify_jwt` on; unauth call → 401
+- [x] `supabase secrets set ANTHROPIC_API_KEY=...` (needs Anthropic billing/credits)
+- [x] `supabase secrets set PIPELINE_MAX_ARTICLES_PER_RUN=25`
+- [x] dry run → `errors: 0`; real run → rows in `public.deals`
 
-Once the key is set, watch logs in another terminal
-(`supabase functions logs daily-pipeline`) and run:
+Re-run any time (service_role secret from Dashboard → Settings → API Keys → legacy):
 
 ```powershell
 $env:SUPABASE_SERVICE_ROLE_KEY = "eyJ...service_role..."
-
-# dry run — fetch + extract, logs what it would write, no DB changes
-powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1
-
-# real run
-powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1   # no writes
+powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1       # writes
 ```
 
-Or skip the scripts entirely — the raw call:
-
-```powershell
-curl.exe -sS -X POST "https://nggfbjwpdggrezhtasys.supabase.co/functions/v1/daily-pipeline?dry_run=1" -H "Authorization: Bearer $env:SUPABASE_SERVICE_ROLE_KEY" -H "Content-Type: application/json" -d "{}"
-```
-(drop `?dry_run=1` for the real run)
-
-**✅ Checkpoint:** Dashboard → Table Editor → `deals` has rows; the response is
-`"ok": true` with non-zero `inserted`.
+Logs: Dashboard → Edge Functions → `daily-pipeline` → Logs (the CLI has no `functions logs`).
 
 ---
 
-## Stage 2 — Daily schedule
+## Stage 2 — Daily cron ⬜
 
-Dashboard → Edge Functions → `daily-pipeline` → Schedules → Add → `15 6 * * *` (06:15 UTC).
+Dashboard → **Integrations → Cron** (a.k.a. Database → Cron Jobs) → **Create job**:
 
-_Or_ SQL-managed: in the SQL editor run
-`select vault.create_secret('<SERVICE_ROLE_KEY>', 'daily_pipeline_token');`
+| Field | Value |
+|---|---|
+| Name | `deal-check-daily` |
+| Schedule | `15 6 * * *` (06:15 UTC) |
+| Type | Supabase Edge Function → `daily-pipeline` |
+| Method | POST |
+
+The UI attaches the project anon key as `Authorization`, which satisfies `verify_jwt`.
+Use **Run now** once and confirm `ok: true`.
+
+_SQL alternative:_ `select vault.create_secret('<SERVICE_ROLE_KEY>', 'daily_pipeline_token');`
 then `supabase db push` to apply `migrations/20260831000002_schedule_daily_pipeline.sql`.
 
-**✅ Checkpoint:** Schedules tab lists the job; Invocations count increases the next day.
+**✅ Checkpoint:** job listed; Invocations count rises the next day.
 
 ---
 
-## Stage 3 — Frontend on Supabase Storage
+## Stage 3 — Frontend on GitHub Pages ⬜
 
-1. [x] `frontend/deal-check.html` wired to the Supabase REST API (`loadDeals()` +
-   `mapRow()`; `window.storage` and `SEED_DEALS` removed).
-2. [x] Publishable key (`sb_publishable_…`) set in `frontend/deal-check.html`; Data API
-   enabled, `public` schema exposed, `GET /rest/v1/deals` returns `[]`.
-3. [ ] One-time: Dashboard → Storage → New bucket → name **`site`**, **Public** enabled.
-4. [ ] Upload:
+> **Why not Supabase Storage:** every public Storage object is served with
+> `Content-Security-Policy: default-src 'none'; sandbox` and `Content-Type: text/plain`.
+> That disables all JavaScript, styles, fonts, and `fetch` — a single-file web app
+> cannot run there, and the header is not configurable. GitHub Pages serves plain HTML
+> correctly.
 
-   ```powershell
-   $env:SUPABASE_SERVICE_ROLE_KEY = "eyJ...service_role..."
-   powershell -ExecutionPolicy Bypass -File .\scripts\deploy-frontend.ps1
-   ```
+The published file is **`docs/index.html`** (a copy of the wired page; keep it in sync if
+you edit the source).
 
-**Live URL:**
-`https://nggfbjwpdggrezhtasys.supabase.co/storage/v1/object/public/site/deal-check.html`
+1. Push the repo (Stage 4).
+2. GitHub → repo **Settings → Pages** → Source: **Deploy from a branch** →
+   Branch `main`, folder **`/docs`** → Save.
+3. Wait ~1 min for the first build.
 
-**✅ Checkpoint:** that URL loads the ledger, populated from Supabase, filters/sort/date
-groups working. Re-run `deploy-frontend.ps1` any time you change the HTML (`x-upsert`).
+**Live URL:** `https://raseshranjan4-proto.github.io/DealCheck_proto/`
+
+**✅ Checkpoint:** that URL renders the ledger; the deals from Stage 1 appear; filters,
+sort, date-groups, and the ticker work.
+
+Update later: edit `docs/index.html` (and `frontend`-side source if you keep one),
+commit, push — Pages rebuilds automatically.
 
 ---
 
-## Stage 4 — GitHub
+## Stage 4 — GitHub ✅
 
-No `gh` CLI on this machine. Create an **empty** repo at https://github.com/new
-(no README/licence/.gitignore), then:
+Repo: `https://github.com/raseshranjan4-proto/DealCheck_proto` (`main`).
 
-```bash
-cd deal-check
-git branch -M main
-git remote add origin https://github.com/<you>/deal-check.git
-git push -u origin main
+```powershell
+git push
 ```
 
-`.gitignore` already excludes `.env` and CLI state. Nothing secret is committed — keys
-live in Supabase secrets and your local shell env only.
+`.gitignore` excludes `.env` and CLI state. No secrets are committed — the Anthropic key
+and service-role key live only in Supabase secrets and your shell.
+
+**Rotate after go-live:** both the Anthropic key and the `service_role` JWT were pasted in
+plaintext during setup. Anthropic Console → roll the key; Supabase → Settings → API Keys →
+roll the JWT secret (the function's injected copy updates automatically).
