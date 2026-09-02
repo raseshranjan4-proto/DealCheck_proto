@@ -1,7 +1,7 @@
 import type { Article, Extraction } from "./types.ts";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-haiku-4-5-20251001"; // spec section 4: structured extraction, not open-ended reasoning
+const MODEL = "claude-haiku-4-5"; // spec section 4: structured extraction, not open-ended reasoning
 
 // Repeated verbatim on every call -> cache it for the ~90% repeated-input discount.
 const SYSTEM_PROMPT =
