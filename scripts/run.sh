@@ -12,7 +12,7 @@ if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
   exit 1
 fi
 
-URL="https://${REF}.supabase.co/functions/v1/daily-pipeline"
+URL="https://${REF}.supabase.co/functions/v1/daily-pipeline?wait=1"
 echo "POST ${URL}"
 
 curl -sS -X POST "${URL}" \

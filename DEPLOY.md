@@ -36,7 +36,8 @@ Logs: Dashboard → Edge Functions → `daily-pipeline` → Logs (the CLI has no
 
 ## Stage 2 — Daily cron ⬜
 
-Dashboard → **Integrations → Cron** (a.k.a. Database → Cron Jobs) → **Create job**:
+Dashboard → **Integrations → Cron** (a.k.a. Database → Cron Jobs) → **Create job**.
+First run needs the `pg_net` extension — click **Install pg_net extension** in the Type panel.
 
 | Field | Value |
 |---|---|
@@ -44,14 +45,23 @@ Dashboard → **Integrations → Cron** (a.k.a. Database → Cron Jobs) → **Cr
 | Schedule | `15 6 * * *` (06:15 UTC) |
 | Type | Supabase Edge Function → `daily-pipeline` |
 | Method | POST |
+| Timeout | 5000 (the UI cap — fine, see below) |
+| HTTP Headers / Body | leave empty |
 
-The UI attaches the project anon key as `Authorization`, which satisfies `verify_jwt`.
-Use **Run now** once and confirm `ok: true`.
+The function runs in **background mode** when called with no query string: it responds
+`202 {accepted:true}` in <1s, then finishes the ~60s pipeline via `EdgeRuntime.waitUntil`.
+So the 5s cron timeout doesn't matter — the cron logs a fast success and the work
+completes independently. The Edge Function type auto-attaches the project anon key, which
+satisfies `verify_jwt`.
+
+After creating, use **Run now**, then verify the real work in
+Dashboard → Edge Functions → `daily-pipeline` → **Logs** (look for `pipeline done: {...}`)
+or by watching the `deals` row count — **not** the cron run status alone.
 
 _SQL alternative:_ `select vault.create_secret('<SERVICE_ROLE_KEY>', 'daily_pipeline_token');`
 then `supabase db push` to apply `migrations/20260831000002_schedule_daily_pipeline.sql`.
 
-**✅ Checkpoint:** job listed; Invocations count rises the next day.
+**✅ Checkpoint:** job listed; `deals` grows after a run / the next day.
 
 ---
 

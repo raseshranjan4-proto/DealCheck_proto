@@ -73,6 +73,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1   # no writes
 powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1       # writes
 ```
 
+Invocation modes (query string on `…/functions/v1/daily-pipeline`):
+
+| Call | Behaviour |
+|---|---|
+| _(none)_ | background: returns `202` in <1s, runs via `EdgeRuntime.waitUntil` — **the cron uses this** |
+| `?wait=1` | run synchronously, return the full summary (`scripts/run.ps1`) |
+| `?dry_run=1` | synchronous, no DB writes, logs what it would write (implies `wait`) |
+
 Successful response shape:
 
 ```json
