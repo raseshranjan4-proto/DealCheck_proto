@@ -1,22 +1,15 @@
-# Invoke the deployed daily-pipeline with ?dry_run=1 — fetches feeds and runs extraction,
-# logs what it WOULD write, makes no DB changes.
+# Dry run: fetch feeds + run extraction, log what WOULD be written, make no DB changes.
 #
-#   $env:SUPABASE_SERVICE_ROLE_KEY = "..."; pwsh ./scripts/dry-run.ps1
-#
-param(
-  [string]$Ref = "nggfbjwpdggrezhtasys"
-)
+# Usage (Windows PowerShell 5.1):
+#   $env:SUPABASE_SERVICE_ROLE_KEY = "eyJ..."
+#   powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1
+
+param([string]$Ref = "nggfbjwpdggrezhtasys")
 
 $key = $env:SUPABASE_SERVICE_ROLE_KEY
-if (-not $key) {
-  Write-Error "Set `$env:SUPABASE_SERVICE_ROLE_KEY first (service_role key from Dashboard > Project Settings > API)."
-  exit 1
-}
+if (-not $key) { Write-Error 'Set $env:SUPABASE_SERVICE_ROLE_KEY first (service_role secret from Dashboard > Settings > API Keys).'; exit 1 }
 
 $uri = "https://$Ref.supabase.co/functions/v1/daily-pipeline?dry_run=1"
-Write-Host "POST $uri" -ForegroundColor Cyan
+Write-Host "POST $uri"
 
-curl.exe -sS -X POST $uri `
-  -H "Authorization: Bearer $key" `
-  -H "Content-Type: application/json" `
-  -d "{}"
+& curl.exe -sS -X POST $uri -H "Authorization: Bearer $key" -H "Content-Type: application/json" -d "{}"
