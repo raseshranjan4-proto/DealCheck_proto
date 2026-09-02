@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
     invalid: 0,
     errors: 0,
     dry_run: false,
+    error_samples: [] as string[],
   };
 
   try {
@@ -100,7 +101,9 @@ Deno.serve(async (req) => {
         await markProcessed(supabase, article.url, true);
       } catch (err) {
         summary.errors++;
-        console.error(`article failed: ${article.url} — ${err instanceof Error ? err.message : err}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`article failed: ${article.url} — ${msg}`);
+        if (summary.error_samples.length < 5) summary.error_samples.push(msg.slice(0, 300));
       }
     }
 
