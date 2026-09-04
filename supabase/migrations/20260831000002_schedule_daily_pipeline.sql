@@ -1,35 +1,29 @@
 -- Daily cron that invokes the `daily-pipeline` Edge Function.
--- OPT-IN: only apply this if you want the schedule managed in SQL rather than in the
--- Supabase Dashboard (Edge Functions > daily-pipeline > Schedules).
+-- OPT-IN: only apply this if you want the schedule managed in SQL rather than clicked in
+-- the Dashboard. This is, in fact, what ended up working for this project.
 --
--- Prerequisite — store the function's bearer token in Vault so it is not hard-coded here:
+-- Auth: the function runs with verify_jwt = false and gates on PIPELINE_TRIGGER_SECRET
+-- (query param `key` or header `x-trigger-key`). Set that secret first:
+--   supabase secrets set PIPELINE_TRIGGER_SECRET=<a long random string>
 --
---   select vault.create_secret('<SERVICE_ROLE_KEY>', 'daily_pipeline_token');
---
--- Then edit the cron expression below if desired and run `supabase db push`.
--- '15 6 * * *' = 06:15 UTC every day.
+-- Then replace <PIPELINE_TRIGGER_SECRET> below with the same value and run this.
+-- '15 6 * * *' = 06:15 UTC daily.
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
--- Remove any previous copy of this job before (re)creating it.
-select cron.unschedule('deal-check-daily-pipeline')
-where exists (select 1 from cron.job where jobname = 'deal-check-daily-pipeline');
+select cron.unschedule('deal-check-daily')
+where exists (select 1 from cron.job where jobname = 'deal-check-daily');
 
 select cron.schedule(
-  'deal-check-daily-pipeline',
+  'deal-check-daily',
   '15 6 * * *',
   $$
   select net.http_post(
-    url     := 'https://nggfbjwpdggrezhtasys.supabase.co/functions/v1/daily-pipeline',
-    headers := jsonb_build_object(
-      'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || (
-        select decrypted_secret from vault.decrypted_secrets where name = 'daily_pipeline_token'
-      )
-    ),
+    url     := 'https://nggfbjwpdggrezhtasys.supabase.co/functions/v1/daily-pipeline?key=<PIPELINE_TRIGGER_SECRET>',
+    headers := '{"Content-Type":"application/json"}'::jsonb,
     body    := '{}'::jsonb,
-    timeout_milliseconds := 300000
+    timeout_milliseconds := 5000
   );
   $$
 );

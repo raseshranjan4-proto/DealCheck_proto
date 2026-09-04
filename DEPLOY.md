@@ -36,32 +36,49 @@ Logs: Dashboard → Edge Functions → `daily-pipeline` → Logs (the CLI has no
 
 ## Stage 2 — Daily cron ⬜
 
-Dashboard → **Integrations → Cron** (a.k.a. Database → Cron Jobs) → **Create job**.
-First run needs the `pg_net` extension — click **Install pg_net extension** in the Type panel.
+**Auth model:** `verify_jwt = false` on the function (the cron UI / `net.http_post` could
+not reliably send a valid project JWT). Instead the function requires a shared secret —
+`?key=<PIPELINE_TRIGGER_SECRET>` in the query string, or an `x-trigger-key` header.
 
-| Field | Value |
-|---|---|
-| Name | `deal-check-daily` |
-| Schedule | `15 6 * * *` (06:15 UTC) |
-| Type | Supabase Edge Function → `daily-pipeline` |
-| Method | POST |
-| Timeout | 5000 (the UI cap — fine, see below) |
-| HTTP Headers / Body | leave empty |
+Prereqs: `pg_cron` + `pg_net` extensions enabled (Database → Extensions), and the secret set:
+```powershell
+supabase secrets set PIPELINE_TRIGGER_SECRET=<a long random string>
+```
 
-The function runs in **background mode** when called with no query string: it responds
-`202 {accepted:true}` in <1s, then finishes the ~60s pipeline via `EdgeRuntime.waitUntil`.
-So the 5s cron timeout doesn't matter — the cron logs a fast success and the work
-completes independently. The Edge Function type auto-attaches the project anon key, which
-satisfies `verify_jwt`.
+Schedule via **SQL Editor** (the cron UI's "Edge Function" type is fine too, but SQL is
+what actually worked here — paste the same secret):
 
-After creating, use **Run now**, then verify the real work in
-Dashboard → Edge Functions → `daily-pipeline` → **Logs** (look for `pipeline done: {...}`)
-or by watching the `deals` row count — **not** the cron run status alone.
+```sql
+select cron.unschedule('deal-check-daily');  -- ignore error if it doesn't exist yet
 
-_SQL alternative:_ `select vault.create_secret('<SERVICE_ROLE_KEY>', 'daily_pipeline_token');`
-then `supabase db push` to apply `migrations/20260831000002_schedule_daily_pipeline.sql`.
+select cron.schedule(
+  'deal-check-daily',
+  '15 6 * * *',
+  $$
+  select net.http_post(
+    url     := 'https://nggfbjwpdggrezhtasys.supabase.co/functions/v1/daily-pipeline?key=<PIPELINE_TRIGGER_SECRET>',
+    headers := '{"Content-Type":"application/json"}'::jsonb,
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 5000
+  );
+  $$
+);
+```
 
-**✅ Checkpoint:** job listed; `deals` grows after a run / the next day.
+Background mode: the bare call (no `wait`/`dry_run`) returns `202` in <1s and finishes the
+~60s pipeline via `EdgeRuntime.waitUntil`, so the 5s cron timeout is irrelevant.
+
+Test immediately — run the inner `net.http_post(... ?key=<secret> ...)` on its own, wait
+~90s, then:
+```sql
+select id, status_code, left(content::text,150) content, created
+from net._http_response order by created desc limit 3;   -- want status_code 202
+select count(*) from public.deals;                        -- want it to grow
+```
+Real health = Edge Functions → `daily-pipeline` → **Logs** (`pipeline done: {...}`), not the
+cron run-status line.
+
+**✅ Checkpoint:** `net._http_response` shows `202`; `deals` grows after the test / next day.
 
 ---
 

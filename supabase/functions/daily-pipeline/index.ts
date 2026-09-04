@@ -29,6 +29,15 @@ Deno.serve((req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   const params = new URL(req.url).searchParams;
+
+  // Auth: verify_jwt is off (the cron couldn't reliably send a valid JWT), so gate on a
+  // shared secret in the query string instead. Enforced only when the secret is configured.
+  const triggerSecret = Deno.env.get("PIPELINE_TRIGGER_SECRET");
+  const providedKey = params.get("key") ?? req.headers.get("x-trigger-key");
+  if (triggerSecret && providedKey !== triggerSecret) {
+    return Promise.resolve(json(401, { ok: false, error: "invalid or missing key" }));
+  }
+
   const dryRun = params.get("dry_run") === "1";
   const wait = dryRun || params.get("wait") === "1";
 

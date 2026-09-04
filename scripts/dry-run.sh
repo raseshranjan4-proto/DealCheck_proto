@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Invoke the deployed daily-pipeline with ?dry_run=1 — fetches feeds and runs extraction,
-# logs what it WOULD write, makes no DB changes.
+# Dry run: fetch feeds + run extraction, log what WOULD be written, no DB changes.
 #
-#   SUPABASE_SERVICE_ROLE_KEY=... ./scripts/dry-run.sh
+#   PIPELINE_TRIGGER_SECRET=... ./scripts/dry-run.sh
 #
 set -euo pipefail
 
 REF="${1:-nggfbjwpdggrezhtasys}"
 
-if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
-  echo "Set SUPABASE_SERVICE_ROLE_KEY first (service_role key from Dashboard > Project Settings > API)." >&2
+if [ -z "${PIPELINE_TRIGGER_SECRET:-}" ]; then
+  echo "Set PIPELINE_TRIGGER_SECRET first (same value as the Supabase secret)." >&2
   exit 1
 fi
 
@@ -17,6 +16,6 @@ URL="https://${REF}.supabase.co/functions/v1/daily-pipeline?dry_run=1"
 echo "POST ${URL}"
 
 curl -sS -X POST "${URL}" \
-  -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
   -H "Content-Type: application/json" \
+  -H "x-trigger-key: ${PIPELINE_TRIGGER_SECRET}" \
   -d '{}'

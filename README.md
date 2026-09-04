@@ -63,17 +63,22 @@ deal-check/
 
 See [`DEPLOY.md`](DEPLOY.md) for the exact remaining steps.
 
+## Auth
+
+`verify_jwt = false` on the function — the Supabase cron UI / `net.http_post` could not
+reliably send a valid project JWT. The function instead requires the shared secret
+**`PIPELINE_TRIGGER_SECRET`**, passed as `?key=<secret>` or an `x-trigger-key` header.
+Set it once: `supabase secrets set PIPELINE_TRIGGER_SECRET=<random string>`.
+
 ## Re-running the pipeline
 
-service_role secret from Dashboard → Settings → API Keys → "JWT-based keys (legacy)":
-
 ```powershell
-$env:SUPABASE_SERVICE_ROLE_KEY = "eyJ...service_role..."
+$env:PIPELINE_TRIGGER_SECRET = "<same value as the Supabase secret>"
 powershell -ExecutionPolicy Bypass -File .\scripts\dry-run.ps1   # no writes
 powershell -ExecutionPolicy Bypass -File .\scripts\run.ps1       # writes
 ```
 
-Invocation modes (query string on `…/functions/v1/daily-pipeline`):
+Invocation modes (query string on `…/functions/v1/daily-pipeline`, all need the key):
 
 | Call | Behaviour |
 |---|---|
