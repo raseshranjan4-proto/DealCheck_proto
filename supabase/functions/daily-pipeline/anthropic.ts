@@ -15,6 +15,13 @@ funding / M&A / PE event — e.g. a market roundup, trend piece, listicle, or op
 Never guess a number: only fill amount_usd_millions if the article states a figure. Convert it to
 millions of USD (a "$1.1B round" -> 1100). Leave it null for "undisclosed" or vague language.
 
+amount_usd_millions is the money that changed hands (raised or paid) — never the company's
+valuation, and never the other way around. valuation_usd_millions is a separate figure: the
+company/deal valuation, only if the article states one explicitly (e.g. "raised $50M at a
+$500M valuation" -> amount_usd_millions 50, valuation_usd_millions 500). Do not derive one
+from the other, and do not apply an assumed multiple — leave valuation_usd_millions null
+whenever the article doesn't state a valuation outright.
+
 Sector priority when a deal could fit more than one: quantum > ai > defi > deeptech > other.
 Classify a company by what it physically makes or fundamentally is, not the industry it serves.
 Test: if you removed the AI/ML component and a working core product remains, it is deeptech plus a
@@ -31,7 +38,8 @@ const TOOL = {
     additionalProperties: false,
     required: [
       "is_deal", "company", "description", "primary_sector", "sub_sector_tags",
-      "deal_type", "stage", "amount_display", "amount_usd_millions", "investors",
+      "deal_type", "stage", "amount_display", "amount_usd_millions",
+      "valuation_display", "valuation_usd_millions", "investors",
       "region", "announced_date",
     ],
     properties: {
@@ -42,8 +50,10 @@ const TOOL = {
       sub_sector_tags: { type: "array", items: { type: "string" }, description: "e.g. Semiconductors, Robotics, Space, Biotech, AI Infrastructure, Payments/Stablecoins, Prediction Markets" },
       deal_type: { type: ["string", "null"], enum: ["VC", "MA", "PE", "SPAC", "Fund", null] },
       stage: { type: ["string", "null"], description: "e.g. Seed, Series B, Buyout" },
-      amount_display: { type: ["string", "null"], description: 'Human-readable, e.g. "$1.1B"' },
-      amount_usd_millions: { type: ["number", "null"], description: "Millions of USD, only if stated." },
+      amount_display: { type: ["string", "null"], description: 'Human-readable amount raised/paid, e.g. "$1.1B".' },
+      amount_usd_millions: { type: ["number", "null"], description: "Millions of USD raised/paid, only if stated." },
+      valuation_display: { type: ["string", "null"], description: 'Human-readable valuation, e.g. "$1.2B" — distinct from the amount raised/paid.' },
+      valuation_usd_millions: { type: ["number", "null"], description: "Valuation in millions of USD, only if explicitly stated. Never derived from amount_usd_millions." },
       investors: { type: ["string", "null"] },
       region: { type: ["string", "null"] },
       announced_date: { type: ["string", "null"], description: "yyyy-mm-dd" },
@@ -108,6 +118,8 @@ function normalize(raw: Record<string, unknown>): Extraction {
     stage: str(raw.stage),
     amount_display: str(raw.amount_display),
     amount_usd_millions: num(raw.amount_usd_millions),
+    valuation_display: str(raw.valuation_display),
+    valuation_usd_millions: num(raw.valuation_usd_millions),
     investors: str(raw.investors),
     region: str(raw.region),
     announced_date: str(raw.announced_date),

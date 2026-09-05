@@ -36,12 +36,12 @@ export type Layer2Outcome =
 /**
  * Layer 2 — identity dedup. Match = same company (case-insensitive) + same primary_sector
  * + announced_date within PROXIMITY_DAYS. On a match, update in place only if the new
- * article carries a more specific amount; otherwise discard.
+ * article carries a more specific amount and/or valuation; otherwise discard.
  */
 export async function resolveLayer2(supabase: SupabaseClient, row: DealRow): Promise<Layer2Outcome> {
   const { data, error } = await supabase
     .from("deals")
-    .select("id, announced_date, amount_usd_millions, amount_display")
+    .select("id, announced_date, amount_usd_millions, amount_display, valuation_usd_millions, valuation_display")
     .ilike("company", escapeIlike(row.company))
     .eq("primary_sector", row.primary_sector);
   if (error) throw new Error(`layer-2 dedup query: ${error.message}`);
@@ -56,14 +56,19 @@ export async function resolveLayer2(supabase: SupabaseClient, row: DealRow): Pro
   });
   if (!match) return { action: "insert" };
 
-  const hadAmount = match.amount_usd_millions !== null && match.amount_usd_millions !== undefined;
-  const hasNewAmount = row.amount_usd_millions !== null;
-  const amountChanged = hasNewAmount && Number(row.amount_usd_millions) !== Number(match.amount_usd_millions);
-  const gainedDisplay = !match.amount_display && !!row.amount_display;
+  const gainedFigure = (newNum: number | null, oldNum: unknown, newDisplay: string | null, oldDisplay: unknown) => {
+    const had = oldNum !== null && oldNum !== undefined;
+    const has = newNum !== null;
+    const changed = has && Number(newNum) !== Number(oldNum);
+    const gainedDisplay = !oldDisplay && !!newDisplay;
+    return (has && !had) || changed || gainedDisplay;
+  };
 
-  if ((hasNewAmount && !hadAmount) || amountChanged || gainedDisplay) {
-    return { action: "update", id: match.id as string };
-  }
+  const shouldUpdate =
+    gainedFigure(row.amount_usd_millions, match.amount_usd_millions, row.amount_display, match.amount_display) ||
+    gainedFigure(row.valuation_usd_millions, match.valuation_usd_millions, row.valuation_display, match.valuation_display);
+
+  if (shouldUpdate) return { action: "update", id: match.id as string };
   return { action: "discard", id: match.id as string };
 }
 

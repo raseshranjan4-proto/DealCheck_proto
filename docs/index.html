@@ -251,6 +251,7 @@ function mapRow(r){
     stage: r.stage || '',
     amount: r.amount_display || '',
     amountNum: r.amount_usd_millions == null ? 0 : Number(r.amount_usd_millions),
+    valuation: r.valuation_display || '',
     investors: r.investors || '',
     region: r.region || '',
     date: r.announced_date || '',
@@ -390,7 +391,10 @@ function render(){
       </td>
       <td><span class="sector-block" style="background:${sec.color}">${escapeHtml(sec.short)}</span></td>
       <td class="investors-cell">${escapeHtml(d.investors||'—')}</td>
-      <td class="amount-cell">${escapeHtml(d.amount||'—')}</td>
+      <td class="amount-cell">
+        ${escapeHtml(d.amount||'—')}
+        ${d.valuation ? `<div class="sector-label">at ${escapeHtml(d.valuation)} val.</div>` : ''}
+      </td>
       <td class="region-cell">${escapeHtml(d.region||'—')}</td>
       <td class="date-cell">${fmtDate(d.date)}</td>
       <td>

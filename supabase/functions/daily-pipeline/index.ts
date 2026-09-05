@@ -126,6 +126,8 @@ async function runPipeline(dryRun: boolean) {
           .update({
             amount_display: v.row.amount_display,
             amount_usd_millions: v.row.amount_usd_millions,
+            valuation_display: v.row.valuation_display,
+            valuation_usd_millions: v.row.valuation_usd_millions,
             source_url: v.row.source_url,
           })
           .eq("id", outcome.id);

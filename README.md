@@ -104,10 +104,13 @@ changed only where it read data:
 
 - `loadDeals()` does a `fetch` against `…/rest/v1/deals` instead of `window.storage`.
 - `mapRow()` maps DB columns (`primary_sector`, `deal_type`, `amount_display`,
-  `amount_usd_millions`, `announced_date`, `source_url`) to the flat field names the
-  table/stats/ticker render against.
+  `amount_usd_millions`, `valuation_display`, `announced_date`, `source_url`) to the flat
+  field names the table/stats/ticker render against.
 - `SEED_DEALS` and `saveDeals()` removed; fetch failure shows an error empty-state.
 - `SUPABASE_ANON_KEY` holds the publishable key (`sb_publishable_…`), public by design.
+- The amount cell shows a small "at $X val." sub-line (`valuation_display`) when a
+  valuation is on record — same treatment as the `stage` line under the company name, so
+  it stays inside the locked design language rather than adding a new column.
 
 **Not Supabase Storage:** public Storage objects are served with
 `Content-Security-Policy: default-src 'none'; sandbox`, which disables all JS/CSS/fetch and

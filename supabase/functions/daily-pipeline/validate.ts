@@ -21,10 +21,8 @@ export function toDealRow(x: Extraction, sourceUrl: string): ValidationResult {
   if (x.deal_type !== null && !DEAL_TYPES.has(x.deal_type)) {
     return { ok: false, reason: `bad deal_type: ${x.deal_type}` };
   }
-  if (x.amount_usd_millions !== null &&
-      !(typeof x.amount_usd_millions === "number" && isFinite(x.amount_usd_millions) && x.amount_usd_millions >= 0)) {
-    return { ok: false, reason: "bad amount_usd_millions" };
-  }
+  if (!isSaneAmount(x.amount_usd_millions)) return { ok: false, reason: "bad amount_usd_millions" };
+  if (!isSaneAmount(x.valuation_usd_millions)) return { ok: false, reason: "bad valuation_usd_millions" };
 
   return {
     ok: true,
@@ -37,12 +35,19 @@ export function toDealRow(x: Extraction, sourceUrl: string): ValidationResult {
       stage: x.stage,
       amount_display: x.amount_display,
       amount_usd_millions: x.amount_usd_millions,
+      valuation_display: x.valuation_display,
+      valuation_usd_millions: x.valuation_usd_millions,
       investors: x.investors,
       region: x.region,
       announced_date: normalizeDate(x.announced_date),
       source_url: sourceUrl,
     },
   };
+}
+
+/** null is fine (not stated); otherwise must be a real, non-negative number. */
+function isSaneAmount(n: number | null): boolean {
+  return n === null || (typeof n === "number" && isFinite(n) && n >= 0);
 }
 
 /** Accept only a sane yyyy-mm-dd; drop anything malformed or wildly out of range. */

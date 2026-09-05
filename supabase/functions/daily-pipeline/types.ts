@@ -21,6 +21,8 @@ export interface Extraction {
   stage: string | null;
   amount_display: string | null;
   amount_usd_millions: number | null;
+  valuation_display: string | null;
+  valuation_usd_millions: number | null;
   investors: string | null;
   region: string | null;
   announced_date: string | null; // yyyy-mm-dd
@@ -36,6 +38,8 @@ export interface DealRow {
   stage: string | null;
   amount_display: string | null;
   amount_usd_millions: number | null;
+  valuation_display: string | null;
+  valuation_usd_millions: number | null;
   investors: string | null;
   region: string | null;
   announced_date: string | null;
