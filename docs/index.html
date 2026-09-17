@@ -78,11 +78,35 @@
   .pill .sw{width:7px; height:7px; border-radius:1px; display:inline-block;}
   .pill:hover{border-color:var(--navy);}
   .pill.active{background:var(--navy-soft); border-color:var(--navy); color:var(--navy);}
-  .date-inputs{display:none; gap:8px; align-items:center;}
-  .date-inputs.show{display:flex;}
-  .date-inputs input{background:var(--bg); border:1px solid var(--border-strong); color:var(--ink); padding:8px 10px; border-radius:6px; font-family:var(--font-sans); font-size:12.5px;}
-  .date-inputs input:focus{outline:none; border-color:var(--navy);}
-  .date-sep{color:var(--ink-faint); font-size:12px;}
+  .toolbar-btn{
+    background:var(--bg); border:1px solid var(--border-strong); color:var(--ink-muted);
+    padding:8px 12px; border-radius:6px; font-family:var(--font-sans); font-size:12.5px; font-weight:500;
+    cursor:pointer; white-space:nowrap;
+  }
+  .toolbar-btn:hover{border-color:var(--navy); color:var(--navy);}
+  .results-line{font-size:12px; color:var(--ink-faint); padding:2px 2px 0;}
+  .facet-label{font-size:10.5px; font-weight:600; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.03em; align-self:center; margin-right:2px;}
+  .inv-chip{cursor:pointer; border-bottom:1px dotted var(--ink-faint);}
+  .inv-chip:hover{color:var(--navy); border-color:var(--navy);}
+
+  /* ---- Detail drawer ---- */
+  .drawer-overlay{position:fixed; inset:0; background:rgba(16,21,31,.35); opacity:0; visibility:hidden; transition:opacity .15s ease; z-index:50;}
+  .drawer-overlay.show{opacity:1; visibility:visible;}
+  .drawer-panel{
+    position:absolute; top:0; right:0; height:100%; width:min(420px,92vw); background:var(--bg);
+    box-shadow:-8px 0 24px rgba(16,21,31,.12); padding:28px 26px; overflow-y:auto;
+    transform:translateX(24px); transition:transform .15s ease;
+  }
+  .drawer-overlay.show .drawer-panel{transform:translateX(0);}
+  .drawer-close{position:absolute; top:20px; right:20px; background:none; border:none; font-size:20px; color:var(--ink-faint); cursor:pointer; line-height:1;}
+  .drawer-close:hover{color:var(--ink);}
+  .drawer-sector{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; margin-bottom:8px;}
+  .drawer-title{font-size:21px; font-weight:700; letter-spacing:-.01em; margin-bottom:10px; padding-right:28px;}
+  .drawer-desc{font-size:13.5px; color:var(--ink-muted); line-height:1.55; margin-bottom:22px;}
+  .drawer-facts{display:grid; grid-template-columns:auto 1fr; gap:10px 16px; font-size:13px;}
+  .drawer-facts dt{color:var(--ink-faint); font-size:11px; text-transform:uppercase; letter-spacing:.02em; padding-top:1px;}
+  .drawer-facts dd{color:var(--ink);}
+  .drawer-panel .src-link{display:inline-block; margin-top:22px; font-size:13px;}
 
   /* ---- Date-group block headers ---- */
   .block-header td{padding:18px 12px 8px !important; border-bottom:none !important;}
@@ -162,21 +186,22 @@
       <option value="amount">Largest deal</option>
       <option value="az">Company A → Z</option>
     </select>
-    <select class="sort-select" id="dateFilterSelect" onchange="onDateFilterChange()">
-      <option value="all">All time</option>
+    <select class="sort-select" id="recencySelect" onchange="setRecency(this.value)">
       <option value="today">Today</option>
-      <option value="7d">Last 7 days</option>
-      <option value="30d">Last 30 days</option>
-      <option value="custom">Custom range…</option>
+      <option value="3d">Last 3 days</option>
+      <option value="week">Last week</option>
+      <option value="month">Last month</option>
+      <option value="3m">Last 3 months</option>
+      <option value="all">All time</option>
     </select>
-    <div class="date-inputs" id="customDateInputs">
-      <input type="date" id="dateFrom" onchange="render()">
-      <span class="date-sep">to</span>
-      <input type="date" id="dateTo" onchange="render()">
-    </div>
+    <button class="toolbar-btn" onclick="exportCsv()">Export CSV</button>
+    <button class="toolbar-btn" id="copyLinkBtn" onclick="copyLink()">Copy link</button>
   </div>
+  <div class="filter-row" id="groupPills"></div>
   <div class="filter-row" id="sectorPills"></div>
+  <div class="filter-row" id="tagPills"></div>
   <div class="filter-row" id="typePills"></div>
+  <div class="results-line" id="resultsLine"></div>
 </div>
 
 <div class="table-wrap">
@@ -197,6 +222,13 @@
   <div class="empty" id="emptyState" style="display:none;">
     <div class="big">No deals match this filter</div>
     <div>Try clearing a filter.</div>
+  </div>
+</div>
+
+<div class="drawer-overlay" id="drawerOverlay" onclick="if(event.target===this) closeDrawer()">
+  <div class="drawer-panel">
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">✕</button>
+    <div id="drawerBody"></div>
   </div>
 </div>
 
@@ -247,14 +279,20 @@ const SECTORS = {
 };
 Object.values(SECTORS).forEach(s=>{ s.color = GROUPS[s.group].color; });
 const TYPES = { VC:'VC Round', PE:'PE / Buyout', MA:'M&A', SPAC:'SPAC', IPO:'IPO', Debt:'Debt', Grant:'Grant', Secondary:'Secondary', Fund:'Fund Launch' };
+const TAGS = {
+  ai_ml:'AI/ML', quantum:'Quantum', blockchain:'Blockchain', robotics:'Robotics',
+  semiconductors:'Semiconductors', biotech:'Biotech', space:'Space', iot_wearables:'IoT/Wearables',
+  cybersecurity:'Cybersecurity', climate:'Climate', ar_vr:'AR/VR'
+};
+const RECENCY_LABELS = { today:'today', '3d':'the last 3 days', week:'the last week', month:'the last month', '3m':'the last 3 months', all:'all time' };
 
 // ---- Live data source: Supabase REST. The anon key is public and, via RLS, read-only. ----
 const SUPABASE_URL = 'https://nggfbjwpdggrezhtasys.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_0ZNTg07ktaS4vFy2J4tKfg_PhpJZghH';
 
 let deals = [];
-let activeSector = 'all';
-let activeType = 'all';
+let lastFiltered = [];
+const state = { group:'all', sector:'all', tags:new Set(), type:'all', recency:'today' };
 
 async function loadDeals(){
   try{
@@ -271,7 +309,16 @@ async function loadDeals(){
     empty.querySelector('.big').textContent = 'Couldn’t load the registry';
     empty.querySelectorAll('div')[1].textContent = 'The data source is unavailable right now — try again shortly.';
   }
-  buildFilterPills();
+  const urlSort = stateFromUrl();
+  document.getElementById('searchInput').value = new URLSearchParams(location.search).get('q') || '';
+  document.getElementById('recencySelect').value = state.recency;
+  if(urlSort) document.getElementById('sortSelect').value = urlSort;
+  // Today is the default, but don't open onto an empty page if nothing's landed yet today
+  // and the visitor didn't explicitly ask for "today" via a shared link.
+  if(state.recency==='today' && !new URLSearchParams(location.search).has('window') && windowedDeals().length===0){
+    state.recency = '3d';
+    document.getElementById('recencySelect').value = '3d';
+  }
   render();
 }
 
@@ -282,56 +329,54 @@ function mapRow(r){
     company: r.company,
     description: r.description || '',
     sector: r.primary_sector || 'other',
+    tags: Array.isArray(r.tech_tags) ? r.tech_tags : [],
     type: r.deal_type || '',
     stage: r.stage || '',
     amount: r.amount_display || '',
     amountNum: r.amount_usd_millions == null ? 0 : Number(r.amount_usd_millions),
     valuation: r.valuation_display || '',
+    valuationNum: r.valuation_usd_millions == null ? 0 : Number(r.valuation_usd_millions),
+    investorsList: Array.isArray(r.investors_list) ? r.investors_list : [],
     investors: r.investors || '',
     region: r.region || '',
     date: r.announced_date || '',
+    createdAt: r.created_at || '',
     source: r.source_url || ''
   };
 }
 
-function buildFilterPills(){
-  const sectorWrap = document.getElementById('sectorPills');
-  sectorWrap.innerHTML = '';
-  const allPill = document.createElement('button');
-  allPill.className='pill active'; allPill.id='pill-sector-all'; allPill.textContent='All sectors';
-  allPill.onclick=()=>setSector('all');
-  sectorWrap.appendChild(allPill);
-  Object.entries(GROUPS).forEach(([key,val])=>{
-    const p=document.createElement('button');
-    p.className='pill'; p.id='pill-sector-'+key;
-    p.innerHTML=`<span class="sw" style="background:${val.color}"></span>${val.label}`;
-    p.onclick=()=>setSector(key);
-    sectorWrap.appendChild(p);
-  });
-  const typeWrap = document.getElementById('typePills');
-  typeWrap.innerHTML = '';
-  const allType=document.createElement('button');
-  allType.className='pill active'; allType.id='pill-type-all'; allType.textContent='All deal types';
-  allType.onclick=()=>setType('all');
-  typeWrap.appendChild(allType);
-  Object.entries(TYPES).forEach(([key,label])=>{
-    const p=document.createElement('button');
-    p.className='pill'; p.id='pill-type-'+key; p.textContent=label;
-    p.onclick=()=>setType(key);
-    typeWrap.appendChild(p);
-  });
+// ---- URL state (shareable views) ----
+function syncUrl(){
+  const p = new URLSearchParams();
+  if(state.group!=='all') p.set('group', state.group);
+  if(state.sector!=='all') p.set('sector', state.sector);
+  if(state.tags.size) p.set('tags', [...state.tags].join(','));
+  if(state.type!=='all') p.set('type', state.type);
+  if(state.recency!=='today') p.set('window', state.recency);
+  const q = document.getElementById('searchInput').value.trim();
+  if(q) p.set('q', q);
+  const sort = document.getElementById('sortSelect').value;
+  if(sort!=='date') p.set('sort', sort);
+  const qs = p.toString();
+  history.replaceState(null, '', qs ? ('?'+qs) : location.pathname);
 }
-function setSector(key){
-  activeSector=key;
-  document.querySelectorAll('[id^="pill-sector-"]').forEach(el=>el.classList.remove('active'));
-  document.getElementById('pill-sector-'+key).classList.add('active');
-  render();
+function stateFromUrl(){
+  const p = new URLSearchParams(location.search);
+  if(p.has('group')) state.group = p.get('group');
+  if(p.has('sector')) state.sector = p.get('sector');
+  if(p.has('tags')) state.tags = new Set(p.get('tags').split(',').filter(Boolean));
+  if(p.has('type')) state.type = p.get('type');
+  if(p.has('window')) state.recency = p.get('window');
+  return p.get('sort');
 }
-function setType(key){
-  activeType=key;
-  document.querySelectorAll('[id^="pill-type-"]').forEach(el=>el.classList.remove('active'));
-  document.getElementById('pill-type-'+key).classList.add('active');
-  render();
+
+// ---- Formatting ----
+function fmtUSD(m){
+  const n = Number(m)||0;
+  if(n<=0) return null;
+  if(n>=1000) return '$'+(n/1000).toFixed(n>=10000?0:1)+'B';
+  if(n>=1) return '$'+n.toFixed(n>=100?0:1)+'M';
+  return '$'+Math.round(n*1000)+'k';
 }
 function fmtDate(d){
   if(!d) return '—';
@@ -340,29 +385,89 @@ function fmtDate(d){
   return dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
 }
 
-function onDateFilterChange(){
-  const v = document.getElementById('dateFilterSelect').value;
-  document.getElementById('customDateInputs').classList.toggle('show', v==='custom');
-  render();
+// ---- Recency window (created_at) — what the main page defaults to ----
+function recencyCutoff(win){
+  const cutoff = new Date();
+  if(win==='today'){ cutoff.setHours(0,0,0,0); return cutoff; }
+  if(win==='3d') cutoff.setDate(cutoff.getDate()-3);
+  else if(win==='week') cutoff.setDate(cutoff.getDate()-7);
+  else if(win==='month') cutoff.setDate(cutoff.getDate()-30);
+  else if(win==='3m') cutoff.setDate(cutoff.getDate()-90);
+  else return null; // all time
+  return cutoff;
+}
+function windowedDeals(){
+  const cutoff = recencyCutoff(state.recency);
+  if(!cutoff) return deals;
+  return deals.filter(d => d.createdAt && new Date(d.createdAt) >= cutoff);
+}
+function setRecency(v){ state.recency=v; render(); }
+function setGroup(key){ state.group=key; state.sector='all'; render(); }
+function setSector(key){ state.sector=key; render(); }
+function toggleTag(key){ state.tags.has(key) ? state.tags.delete(key) : state.tags.add(key); render(); }
+function setType(key){ state.type=key; render(); }
+
+/** skip* lets a facet's own pill counts reflect every OTHER active filter, not itself. */
+function matchesFacets(d, skip={}){
+  const grp = (SECTORS[d.sector]||SECTORS.other).group;
+  if(!skip.group && state.group!=='all' && grp!==state.group) return false;
+  if(!skip.sector && state.sector!=='all' && d.sector!==state.sector) return false;
+  if(!skip.type && state.type!=='all' && d.type!==state.type) return false;
+  if(!skip.tags && state.tags.size && ![...state.tags].some(t=>d.tags.includes(t))) return false;
+  return true;
 }
 
-function dealDateInRange(d){
-  const filterVal = document.getElementById('dateFilterSelect').value;
-  if(filterVal==='all') return true;
-  if(!d.date) return false;
-  const dealDate = new Date(d.date+'T00:00:00');
-  const today = new Date(); today.setHours(0,0,0,0);
-  if(filterVal==='today') return dealDate.getTime()===today.getTime();
-  if(filterVal==='7d'){ const cutoff=new Date(today); cutoff.setDate(cutoff.getDate()-7); return dealDate>=cutoff; }
-  if(filterVal==='30d'){ const cutoff=new Date(today); cutoff.setDate(cutoff.getDate()-30); return dealDate>=cutoff; }
-  if(filterVal==='custom'){
-    const from = document.getElementById('dateFrom').value;
-    const to = document.getElementById('dateTo').value;
-    if(from && dealDate < new Date(from+'T00:00:00')) return false;
-    if(to && dealDate > new Date(to+'T00:00:00')) return false;
-    return true;
+function pillEl(label, active, onclick, color){
+  const p = document.createElement('button');
+  p.className = 'pill'+(active?' active':'');
+  p.innerHTML = color ? `<span class="sw" style="background:${color}"></span>${escapeHtml(label)}` : escapeHtml(label);
+  p.onclick = onclick;
+  return p;
+}
+
+function renderFacets(base){
+  const groupWrap = document.getElementById('groupPills');
+  groupWrap.innerHTML = '';
+  const groupCounts = {};
+  base.forEach(d=>{ if(matchesFacets(d,{group:true})){ const g=(SECTORS[d.sector]||SECTORS.other).group; groupCounts[g]=(groupCounts[g]||0)+1; } });
+  groupWrap.appendChild(pillEl(`All sectors (${base.filter(d=>matchesFacets(d,{group:true})).length})`, state.group==='all', ()=>setGroup('all')));
+  Object.entries(GROUPS).forEach(([key,val])=>{
+    groupWrap.appendChild(pillEl(`${val.label} (${groupCounts[key]||0})`, state.group===key, ()=>setGroup(key), val.color));
+  });
+
+  const sectorWrap = document.getElementById('sectorPills');
+  sectorWrap.innerHTML = '';
+  if(state.group!=='all'){
+    const subCounts = {};
+    base.forEach(d=>{ if(matchesFacets(d,{sector:true})) subCounts[d.sector]=(subCounts[d.sector]||0)+1; });
+    const inGroup = Object.entries(SECTORS).filter(([,v])=>v.group===state.group);
+    const subAll = inGroup.reduce((s,[k])=>s+(subCounts[k]||0),0);
+    sectorWrap.appendChild(pillEl(`All ${GROUPS[state.group].label} (${subAll})`, state.sector==='all', ()=>setSector('all')));
+    inGroup.forEach(([key,val])=>{
+      const c = subCounts[key]||0;
+      if(c===0 && state.sector!==key) return;
+      sectorWrap.appendChild(pillEl(`${val.short} (${c})`, state.sector===key, ()=>setSector(key), val.color));
+    });
   }
-  return true;
+
+  const tagWrap = document.getElementById('tagPills');
+  tagWrap.innerHTML = '';
+  Object.entries(TAGS).forEach(([key,label])=>{
+    const c = base.filter(d=>matchesFacets(d,{tags:true}) && d.tags.includes(key)).length;
+    if(c===0 && !state.tags.has(key)) return;
+    tagWrap.appendChild(pillEl(`#${label} (${c})`, state.tags.has(key), ()=>toggleTag(key)));
+  });
+
+  const typeWrap = document.getElementById('typePills');
+  typeWrap.innerHTML = '';
+  const typeCounts = {};
+  base.forEach(d=>{ if(matchesFacets(d,{type:true}) && d.type) typeCounts[d.type]=(typeCounts[d.type]||0)+1; });
+  typeWrap.appendChild(pillEl(`All deal types (${Object.values(typeCounts).reduce((a,b)=>a+b,0)})`, state.type==='all', ()=>setType('all')));
+  Object.entries(TYPES).forEach(([key,label])=>{
+    const c = typeCounts[key]||0;
+    if(c===0 && state.type!==key) return;
+    typeWrap.appendChild(pillEl(`${label} (${c})`, state.type===key, ()=>setType(key)));
+  });
 }
 
 function dateBucketLabel(dateStr){
@@ -380,10 +485,10 @@ function dateBucketLabel(dateStr){
 function render(){
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   const sort = document.getElementById('sortSelect').value;
-  let filtered = deals.filter(d=>{
-    if(activeSector!=='all' && (SECTORS[d.sector]||SECTORS.other).group!==activeSector) return false;
-    if(activeType!=='all' && d.type!==activeType) return false;
-    if(!dealDateInRange(d)) return false;
+  const base = windowedDeals();
+
+  let filtered = base.filter(d=>{
+    if(!matchesFacets(d)) return false;
     if(q){ const hay=`${d.company} ${d.description} ${d.investors} ${d.region}`.toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
   });
@@ -392,12 +497,22 @@ function render(){
     if(sort==='az') return a.company.localeCompare(b.company);
     return new Date(b.date||'1970-01-01') - new Date(a.date||'1970-01-01');
   });
+  lastFiltered = filtered;
+
+  renderFacets(base);
+  syncUrl();
+  document.getElementById('resultsLine').textContent =
+    `${filtered.length} deal${filtered.length===1?'':'s'} · showing ${RECENCY_LABELS[state.recency]}`;
 
   const list = document.getElementById('dealList');
   const empty = document.getElementById('emptyState');
   list.innerHTML = '';
   document.querySelector('.deal-table').style.display = filtered.length ? '' : 'none';
   empty.style.display = filtered.length ? 'none' : 'block';
+  if(!filtered.length){
+    empty.querySelector('.big').textContent = 'No deals match this filter';
+    empty.querySelectorAll('div')[1].textContent = 'Try a wider time window, or clear a filter.';
+  }
 
   // Group into date blocks only when sorted by date — grouping by amount/A-Z would be meaningless.
   const grouped = sort === 'date';
@@ -418,6 +533,12 @@ function render(){
     const sec = SECTORS[d.sector] || SECTORS.other;
     const tr = document.createElement('tr');
     tr.style.setProperty('--row-accent', sec.color);
+    const usd = fmtUSD(d.amountNum);
+    const valUsd = fmtUSD(d.valuationNum);
+    const investorsHtml = d.investorsList.length
+      ? d.investorsList.slice(0,3).map(inv=>`<span class="inv-chip" data-inv="${escapeAttr(inv)}">${escapeHtml(inv)}</span>`).join(', ')
+        + (d.investorsList.length>3 ? ` +${d.investorsList.length-3}` : '')
+      : escapeHtml(d.investors||'—');
     tr.innerHTML = `
       <td>
         <div class="company-name">${escapeHtml(d.company)}</div>
@@ -425,20 +546,26 @@ function render(){
         ${d.stage ? `<div class="sector-label">${escapeHtml(d.stage)}</div>` : ''}
       </td>
       <td><span class="sector-block" style="background:${sec.color}">${escapeHtml(sec.short)}</span></td>
-      <td class="investors-cell">${escapeHtml(d.investors||'—')}</td>
+      <td class="investors-cell">${investorsHtml}</td>
       <td class="amount-cell">
-        ${escapeHtml(d.amount||'—')}
-        ${d.valuation ? `<div class="sector-label">at ${escapeHtml(d.valuation)} val.</div>` : ''}
+        ${usd ? usd : (d.amount ? escapeHtml(d.amount) : '—')}
+        ${usd && d.amount ? `<div class="sector-label">${escapeHtml(d.amount)}</div>` : ''}
+        ${valUsd ? `<div class="sector-label">at ${valUsd} val.</div>` : ''}
       </td>
       <td class="region-cell">${escapeHtml(d.region||'—')}</td>
       <td class="date-cell">${fmtDate(d.date)}</td>
       <td>
         <div class="actions-cell">
-          ${d.source ? `<a class="src-link" href="${escapeAttr(d.source)}" target="_blank" rel="noopener">Source ↗</a>` : ''}
+          ${d.source ? `<a class="src-link" href="${escapeAttr(d.source)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Source ↗</a>` : ''}
         </div>
       </td>
     `;
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', (e)=>{ if(!e.target.closest('.inv-chip')) openDrawer(d); });
     list.appendChild(tr);
+  });
+  list.querySelectorAll('.inv-chip').forEach(chip=>{
+    chip.addEventListener('click', (e)=>{ e.stopPropagation(); document.getElementById('searchInput').value = chip.dataset.inv; render(); });
   });
 
   renderStats();
@@ -475,6 +602,53 @@ function renderTicker(){
 
 function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return escapeHtml(s); }
+
+// ---- Detail drawer ----
+function openDrawer(d){
+  const sec = SECTORS[d.sector] || SECTORS.other;
+  const usd = fmtUSD(d.amountNum), valUsd = fmtUSD(d.valuationNum);
+  const investorsText = d.investorsList.length ? d.investorsList.map(escapeHtml).join(', ') : escapeHtml(d.investors||'—');
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="drawer-sector" style="color:${sec.color}">${escapeHtml(sec.label)}${d.tags.length ? ' · ' + d.tags.map(t=>TAGS[t]||t).join(', ') : ''}</div>
+    <h2 class="drawer-title">${escapeHtml(d.company)}</h2>
+    <p class="drawer-desc">${escapeHtml(d.description || 'No description available.')}</p>
+    <dl class="drawer-facts">
+      <dt>Deal type</dt><dd>${escapeHtml(TYPES[d.type]||d.type||'—')}${d.stage ? ' · '+escapeHtml(d.stage) : ''}</dd>
+      <dt>Amount</dt><dd>${usd ? usd + (d.amount ? ' ('+escapeHtml(d.amount)+')' : '') : escapeHtml(d.amount||'—')}</dd>
+      ${valUsd ? `<dt>Valuation</dt><dd>${valUsd}${d.valuation ? ' ('+escapeHtml(d.valuation)+')' : ''}</dd>` : ''}
+      <dt>Investors</dt><dd>${investorsText}</dd>
+      <dt>Region</dt><dd>${escapeHtml(d.region||'—')}</dd>
+      <dt>Announced</dt><dd>${fmtDate(d.date)}</dd>
+    </dl>
+    ${d.source ? `<a class="src-link" href="${escapeAttr(d.source)}" target="_blank" rel="noopener">Read the source ↗</a>` : ''}
+  `;
+  document.getElementById('drawerOverlay').classList.add('show');
+}
+function closeDrawer(){ document.getElementById('drawerOverlay').classList.remove('show'); }
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
+
+// ---- CSV export of whatever's currently on screen ----
+function csvEscape(v){ const s=String(v??''); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+function exportCsv(){
+  const cols = ['company','sector','type','stage','amount','amountNum','valuation','valuationNum','investors','region','date','source'];
+  const lines = [cols.join(','), ...lastFiltered.map(d=>cols.map(c=>csvEscape(d[c])).join(','))];
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'deal-check-export.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ---- Copy the current filtered view as a link ----
+function copyLink(){
+  const btn = document.getElementById('copyLinkBtn');
+  navigator.clipboard?.writeText(location.href).then(()=>{
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(()=>{ btn.textContent = orig; }, 1200);
+  });
+}
 
 loadDeals();
 </script>
