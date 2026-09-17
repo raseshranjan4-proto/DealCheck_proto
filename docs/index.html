@@ -24,6 +24,8 @@
     --defi:#B4650B;
     --deeptech:#1E7A4C;
     --other:#6B7280;
+    --consumer:#A8467A;
+    --health:#B5443A;
     --font-sans:'Inter', -apple-system, sans-serif;
     --font-mono:'IBM Plex Mono', monospace;
   }
@@ -146,7 +148,7 @@
 <header>
   <div>
     <div class="brand"><span class="mark">DC</span><h1>Deal-Check</h1></div>
-    <p class="tagline">A running registry of VC, M&amp;A and PE deals in deep tech, AI, quantum computing and DeFi — worldwide.</p>
+    <p class="tagline">A running registry of startup funding, M&amp;A and PE deals across every sector — India and worldwide.</p>
   </div>
 </header>
 
@@ -204,14 +206,47 @@
 </footer>
 
 <script>
-const SECTORS = {
-  ai:       {label:'AI / ML',       short:'AI',       color:'var(--ai)'},
-  deeptech: {label:'Deep Tech',     short:'Deep Tech', color:'var(--deeptech)'},
-  quantum:  {label:'Quantum',       short:'Quantum',  color:'var(--quantum)'},
-  defi:     {label:'DeFi / Crypto', short:'DeFi',     color:'var(--defi)'},
-  other:    {label:'Other',         short:'Other',    color:'var(--other)'}
+// TAXONOMY.md v2 — 26 market-axis sectors + other, in 6 UI-only groups. Colour comes from the group.
+const GROUPS = {
+  fin:    {label:'Financial Services',             color:'var(--defi)'},
+  soft:   {label:'Software & Security',            color:'var(--ai)'},
+  cons:   {label:'Consumer & Media',               color:'var(--consumer)'},
+  health: {label:'Health',                         color:'var(--health)'},
+  ind:    {label:'Industrial & Frontier',          color:'var(--quantum)'},
+  real:   {label:'Energy, Mobility & Real Assets', color:'var(--deeptech)'},
+  other:  {label:'Other',                          color:'var(--other)'}
 };
-const TYPES = { VC:'VC Round', MA:'M&A', PE:'PE / Buyout', SPAC:'SPAC / Listing', Fund:'Fund Launch' };
+const SECTORS = {
+  payments_banking:         {label:'Payments & Banking',            short:'Payments',      group:'fin'},
+  lending_credit:           {label:'Lending & Credit',              short:'Lending',       group:'fin'},
+  insurance:                {label:'Insurance',                     short:'Insurance',     group:'fin'},
+  wealth_capital_markets:   {label:'Wealth & Capital Markets',      short:'Wealth',        group:'fin'},
+  web3_digital_assets:      {label:'Web3 & Digital Assets',         short:'Web3',          group:'fin'},
+  ai_ml:                    {label:'AI & Machine Learning',         short:'AI',            group:'soft'},
+  enterprise_saas:          {label:'Enterprise SaaS',               short:'SaaS',          group:'soft'},
+  dev_data_infra:           {label:'Developer & Data Infra',        short:'Dev Infra',     group:'soft'},
+  cybersecurity:            {label:'Cybersecurity',                 short:'Security',      group:'soft'},
+  consumer_brands_d2c:      {label:'Consumer Brands & D2C',         short:'D2C',           group:'cons'},
+  ecommerce_retail:         {label:'E-commerce & Retail Tech',      short:'E-commerce',    group:'cons'},
+  media_gaming:             {label:'Media, Gaming & Entertainment', short:'Media',         group:'cons'},
+  edtech:                   {label:'Edtech',                        short:'Edtech',        group:'cons'},
+  healthcare_services:      {label:'Healthcare Services',           short:'Healthcare',    group:'health'},
+  biotech_pharma:           {label:'Biotech & Pharma',              short:'Biotech',       group:'health'},
+  medtech_diagnostics:      {label:'Medical Devices & Diagnostics', short:'Medtech',       group:'health'},
+  semiconductors:           {label:'Semiconductors & Electronics',  short:'Semis',         group:'ind'},
+  robotics_automation:      {label:'Robotics & Automation',         short:'Robotics',      group:'ind'},
+  advanced_manufacturing:   {label:'Advanced Manufacturing',        short:'Manufacturing', group:'ind'},
+  space_defence:            {label:'Space & Defence',               short:'Space',         group:'ind'},
+  quantum:                  {label:'Quantum',                       short:'Quantum',       group:'ind'},
+  energy_climate:           {label:'Energy & Climate Tech',         short:'Climate',       group:'real'},
+  ev_mobility:              {label:'EV & Mobility',                 short:'Mobility',      group:'real'},
+  logistics_supply_chain:   {label:'Logistics & Supply Chain',      short:'Logistics',     group:'real'},
+  agritech_food:            {label:'Agritech & Food Systems',       short:'Agritech',      group:'real'},
+  real_estate_construction: {label:'Real Estate & Construction',    short:'Real Estate',   group:'real'},
+  other:                    {label:'Other',                         short:'Other',         group:'other'}
+};
+Object.values(SECTORS).forEach(s=>{ s.color = GROUPS[s.group].color; });
+const TYPES = { VC:'VC Round', PE:'PE / Buyout', MA:'M&A', SPAC:'SPAC', IPO:'IPO', Debt:'Debt', Grant:'Grant', Secondary:'Secondary', Fund:'Fund Launch' };
 
 // ---- Live data source: Supabase REST. The anon key is public and, via RLS, read-only. ----
 const SUPABASE_URL = 'https://nggfbjwpdggrezhtasys.supabase.co';
@@ -266,7 +301,7 @@ function buildFilterPills(){
   allPill.className='pill active'; allPill.id='pill-sector-all'; allPill.textContent='All sectors';
   allPill.onclick=()=>setSector('all');
   sectorWrap.appendChild(allPill);
-  Object.entries(SECTORS).forEach(([key,val])=>{
+  Object.entries(GROUPS).forEach(([key,val])=>{
     const p=document.createElement('button');
     p.className='pill'; p.id='pill-sector-'+key;
     p.innerHTML=`<span class="sw" style="background:${val.color}"></span>${val.label}`;
@@ -346,7 +381,7 @@ function render(){
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   const sort = document.getElementById('sortSelect').value;
   let filtered = deals.filter(d=>{
-    if(activeSector!=='all' && d.sector!==activeSector) return false;
+    if(activeSector!=='all' && (SECTORS[d.sector]||SECTORS.other).group!==activeSector) return false;
     if(activeType!=='all' && d.type!==activeType) return false;
     if(!dealDateInRange(d)) return false;
     if(q){ const hay=`${d.company} ${d.description} ${d.investors} ${d.region}`.toLowerCase(); if(!hay.includes(q)) return false; }
