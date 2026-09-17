@@ -209,7 +209,7 @@ Apply in order; stop at the first that resolves it.
 | `deals.tech_tags` | New `text[]`, default `'{}'`, validated against the 11 keys in §4 |
 | `deals.sub_sector_tags` | Retire (drop after the reclassification pass) |
 | `deals.deal_type` | Replace CHECK constraint with the 9 values in §5 |
-| Existing 31 rows | One-time reclassification pass: LLM over stored `company` + `description`, writes new `primary_sector` + `tech_tags`. No article re-fetch. |
+| Existing rows (~85 at cut-over) | One-time reclassification pass over stored `company` + `description`, writes new `primary_sector` + `tech_tags`. No article re-fetch. |
 | Extraction prompt & tool schema | Rewrite `anthropic.ts` to emit these keys; the enum lists in the tool schema are the enforcement point |
 | Frontend | Sector-group map (§3), tag filter, recency filter (§9) |
 

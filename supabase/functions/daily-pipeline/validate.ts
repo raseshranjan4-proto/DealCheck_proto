@@ -1,7 +1,5 @@
 import type { DealRow, Extraction } from "./types.ts";
-
-const SECTORS = new Set(["quantum", "ai", "defi", "deeptech", "other"]);
-const DEAL_TYPES = new Set(["VC", "MA", "PE", "SPAC", "Fund"]);
+import { DEAL_TYPE_SET, SECTOR_SET, TAG_SET } from "./taxonomy.ts";
 
 export type ValidationResult =
   | { ok: true; row: DealRow }
@@ -9,16 +7,16 @@ export type ValidationResult =
 
 /**
  * Turn a raw extraction into a DealRow, or reject it with a reason.
- * Rules (spec section 4): required fields present, enums in range, and
- * amount_usd_millions is a real number or null — never inferred from vague language.
+ * Rules: required fields present, sector / deal type / tags drawn only from TAXONOMY.md,
+ * and money fields are real numbers or null — never inferred from vague language.
  */
 export function toDealRow(x: Extraction, sourceUrl: string): ValidationResult {
   if (!x.is_deal) return { ok: false, reason: "not a discrete deal" };
   if (!x.company) return { ok: false, reason: "missing company" };
-  if (!x.primary_sector || !SECTORS.has(x.primary_sector)) {
+  if (!x.primary_sector || !SECTOR_SET.has(x.primary_sector)) {
     return { ok: false, reason: `bad primary_sector: ${x.primary_sector}` };
   }
-  if (x.deal_type !== null && !DEAL_TYPES.has(x.deal_type)) {
+  if (x.deal_type !== null && !DEAL_TYPE_SET.has(x.deal_type)) {
     return { ok: false, reason: `bad deal_type: ${x.deal_type}` };
   }
   if (!isSaneAmount(x.amount_usd_millions)) return { ok: false, reason: "bad amount_usd_millions" };
@@ -30,7 +28,8 @@ export function toDealRow(x: Extraction, sourceUrl: string): ValidationResult {
       company: x.company.trim(),
       description: x.description,
       primary_sector: x.primary_sector,
-      sub_sector_tags: Array.isArray(x.sub_sector_tags) ? x.sub_sector_tags : [],
+      // Off-list tags are dropped, never a reason to reject the whole deal.
+      tech_tags: (Array.isArray(x.tech_tags) ? x.tech_tags : []).filter((t) => TAG_SET.has(t)),
       deal_type: x.deal_type,
       stage: x.stage,
       amount_display: x.amount_display,

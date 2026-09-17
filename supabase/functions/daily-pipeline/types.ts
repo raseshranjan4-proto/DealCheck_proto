@@ -1,5 +1,5 @@
-export type PrimarySector = "quantum" | "ai" | "defi" | "deeptech" | "other";
-export type DealType = "VC" | "MA" | "PE" | "SPAC" | "Fund";
+import type { DealType, PrimarySector, TechTag } from "./taxonomy.ts";
+export type { DealType, PrimarySector, TechTag };
 
 /** One RSS item, normalised across feeds. */
 export interface Article {
@@ -16,7 +16,7 @@ export interface Extraction {
   company: string | null;
   description: string | null;
   primary_sector: PrimarySector | null;
-  sub_sector_tags: string[];
+  tech_tags: TechTag[];
   deal_type: DealType | null;
   stage: string | null;
   amount_display: string | null;
@@ -33,7 +33,7 @@ export interface DealRow {
   company: string;
   description: string | null;
   primary_sector: PrimarySector;
-  sub_sector_tags: string[];
+  tech_tags: TechTag[];
   deal_type: DealType | null;
   stage: string | null;
   amount_display: string | null;
