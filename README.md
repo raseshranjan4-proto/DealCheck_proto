@@ -5,9 +5,13 @@ global M&A/VC/PE deals in deep tech, AI, quantum, and DeFi. Phase 1 (the UI) was
 in claude.ai. This project is Phase 2 — the deployed pipeline that fills the database every
 day, plus the page that reads it.
 
-**Spec of record:** [`../deal-check-context1.md`](../deal-check-context1.md) (supersedes
-`../deal-check-context.md`). Read it before changing pipeline behaviour — the taxonomy,
-dedup rules, extraction prompt, and RLS model are all locked there.
+**Specs of record:**
+- [`TAXONOMY.md`](TAXONOMY.md) — sectors, tech tags, deal types, classification rules,
+  recency semantics (v2, 2026-09-17). The extraction prompt and table constraints must
+  mirror it; change it here first.
+- [`../deal-check-context1.md`](../deal-check-context1.md) — original Phase 1/2 handoff:
+  pipeline stations, dedup rules, RLS model, UI lock. Its §1 taxonomy is superseded by
+  `TAXONOMY.md`.
 
 ## What runs
 
