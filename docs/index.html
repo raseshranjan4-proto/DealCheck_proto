@@ -358,7 +358,8 @@ function syncUrl(){
   const sort = document.getElementById('sortSelect').value;
   if(sort!=='date') p.set('sort', sort);
   const qs = p.toString();
-  history.replaceState(null, '', qs ? ('?'+qs) : location.pathname);
+  try{ history.replaceState(null, '', qs ? ('?'+qs) : location.pathname); }
+  catch(e){ /* sandboxed/null-origin contexts (e.g. an embedding iframe) can reject this; harmless to skip */ }
 }
 function stateFromUrl(){
   const p = new URLSearchParams(location.search);
