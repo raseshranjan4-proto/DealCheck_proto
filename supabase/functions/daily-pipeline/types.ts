@@ -23,7 +23,7 @@ export interface Extraction {
   amount_usd_millions: number | null;
   valuation_display: string | null;
   valuation_usd_millions: number | null;
-  investors: string | null;
+  investors_list: string[];
   region: string | null;
   announced_date: string | null; // yyyy-mm-dd
 }
@@ -40,7 +40,8 @@ export interface DealRow {
   amount_usd_millions: number | null;
   valuation_display: string | null;
   valuation_usd_millions: number | null;
-  investors: string | null;
+  investors: string | null;       // display text, derived from investors_list
+  investors_list: string[];
   region: string | null;
   announced_date: string | null;
   source_url: string;

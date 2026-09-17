@@ -37,6 +37,8 @@ amount_usd_millions: the money that changed hands (raised or paid), in millions 
 valuation_usd_millions: the company's valuation, only if the article states one explicitly ("raised $50M at a $500M valuation" → amount 50, valuation 500). Never derive it from the amount or an assumed multiple; null if not stated.
 amount_display and valuation_display: the figure as written in the article, e.g. "$1.1B", "₹100 Cr".
 
+investors_list: every individual investor or fund named, as an array of proper nouns (e.g. ["Peak XV Partners", "Elevation Capital"]). Split combined mentions apart. Omit generic phrases like "existing investors" or "undisclosed investors" — only named entities. Empty array if none are named.
+
 description: one sentence on what the company does — say who it sells to, since that decides the sector.
 announced_date: the date the deal happened (yyyy-mm-dd), not the article's publish date unless they are the same.`;
 
@@ -49,7 +51,7 @@ const TOOL = {
     required: [
       "is_deal", "company", "description", "primary_sector", "tech_tags", "deal_type",
       "stage", "amount_display", "amount_usd_millions", "valuation_display",
-      "valuation_usd_millions", "investors", "region", "announced_date",
+      "valuation_usd_millions", "investors_list", "region", "announced_date",
     ],
     properties: {
       is_deal: { type: "boolean" },
@@ -63,7 +65,7 @@ const TOOL = {
       amount_usd_millions: { type: ["number", "null"], description: "Amount raised/paid in millions of USD, only if stated." },
       valuation_display: { type: ["string", "null"], description: "Valuation as written — distinct from the amount raised/paid." },
       valuation_usd_millions: { type: ["number", "null"], description: "Valuation in millions of USD, only if explicitly stated. Never derived." },
-      investors: { type: ["string", "null"] },
+      investors_list: { type: "array", items: { type: "string" }, description: "Named investors/funds only, split apart. Empty if none named." },
       region: { type: ["string", "null"] },
       announced_date: { type: ["string", "null"], description: "yyyy-mm-dd" },
     },
@@ -133,7 +135,9 @@ function normalize(raw: Record<string, unknown>): Extraction {
     amount_usd_millions: num(raw.amount_usd_millions),
     valuation_display: str(raw.valuation_display),
     valuation_usd_millions: num(raw.valuation_usd_millions),
-    investors: str(raw.investors),
+    investors_list: Array.isArray(raw.investors_list)
+      ? [...new Set(raw.investors_list.filter((t): t is string => typeof t === "string" && t.trim().length > 0).map((t) => t.trim()))]
+      : [],
     region: str(raw.region),
     announced_date: str(raw.announced_date),
   };
