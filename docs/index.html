@@ -89,6 +89,14 @@
   .inv-chip{cursor:pointer; border-bottom:1px dotted var(--ink-faint);}
   .inv-chip:hover{color:var(--navy); border-color:var(--navy);}
 
+  /* ---- Window bar: the primary "what am I looking at" control ---- */
+  .window-bar{max-width:1180px; margin:22px auto 0; padding:0 24px; display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px 16px;}
+  .window-tabs{display:flex; gap:2px; border-bottom:1px solid var(--border);}
+  .window-tab{background:none; border:none; padding:8px 13px 9px; font-family:var(--font-sans); font-size:13px; font-weight:500; color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap;}
+  .window-tab:hover{color:var(--ink);}
+  .window-tab.active{color:var(--navy); border-bottom-color:var(--navy); font-weight:600;}
+  .window-summary{font-size:12px; color:var(--ink-faint); padding-bottom:8px;}
+
   /* ---- Detail drawer ---- */
   .drawer-overlay{position:fixed; inset:0; background:rgba(16,21,31,.35); opacity:0; visibility:hidden; transition:opacity .15s ease; z-index:50;}
   .drawer-overlay.show{opacity:1; visibility:visible;}
@@ -176,23 +184,20 @@
   </div>
 </header>
 
+<div class="window-bar">
+  <div class="window-tabs" id="windowTabs"></div>
+  <div class="window-summary" id="windowSummary"></div>
+</div>
+
 <div class="stats" id="statsStrip"></div>
 
 <div class="filters">
   <div class="filter-row">
-    <input type="text" class="search-input" id="searchInput" placeholder="Search company, investor, region…" oninput="render()">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search company, region…" oninput="render()">
     <select class="sort-select" id="sortSelect" onchange="render()">
       <option value="date">Newest first</option>
       <option value="amount">Largest deal</option>
       <option value="az">Company A → Z</option>
-    </select>
-    <select class="sort-select" id="recencySelect" onchange="setRecency(this.value)">
-      <option value="today">Today</option>
-      <option value="3d">Last 3 days</option>
-      <option value="week">Last week</option>
-      <option value="month">Last month</option>
-      <option value="3m">Last 3 months</option>
-      <option value="all">All time</option>
     </select>
     <button class="toolbar-btn" onclick="exportCsv()">Export CSV</button>
     <button class="toolbar-btn" id="copyLinkBtn" onclick="copyLink()">Copy link</button>
@@ -284,8 +289,6 @@ const TAGS = {
   semiconductors:'Semiconductors', biotech:'Biotech', space:'Space', iot_wearables:'IoT/Wearables',
   cybersecurity:'Cybersecurity', climate:'Climate', ar_vr:'AR/VR'
 };
-const RECENCY_LABELS = { today:'today', '3d':'the last 3 days', week:'the last week', month:'the last month', '3m':'the last 3 months', all:'all time' };
-
 // ---- Live data source: Supabase REST. The anon key is public and, via RLS, read-only. ----
 const SUPABASE_URL = 'https://nggfbjwpdggrezhtasys.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_0ZNTg07ktaS4vFy2J4tKfg_PhpJZghH';
@@ -311,13 +314,11 @@ async function loadDeals(){
   }
   const urlSort = stateFromUrl();
   document.getElementById('searchInput').value = new URLSearchParams(location.search).get('q') || '';
-  document.getElementById('recencySelect').value = state.recency;
   if(urlSort) document.getElementById('sortSelect').value = urlSort;
   // Today is the default, but don't open onto an empty page if nothing's landed yet today
   // and the visitor didn't explicitly ask for "today" via a shared link.
   if(state.recency==='today' && !new URLSearchParams(location.search).has('window') && windowedDeals().length===0){
     state.recency = '3d';
-    document.getElementById('recencySelect').value = '3d';
   }
   render();
 }
@@ -418,6 +419,23 @@ function matchesFacets(d, skip={}){
   return true;
 }
 
+const WINDOWS = [['today','Today'],['3d','3 days'],['week','Week'],['month','Month'],['3m','3 months'],['all','All time']];
+function renderWindowTabs(base){
+  const tabWrap = document.getElementById('windowTabs');
+  tabWrap.innerHTML = '';
+  WINDOWS.forEach(([key,label])=>{
+    const b = document.createElement('button');
+    b.className = 'window-tab'+(state.recency===key?' active':'');
+    b.textContent = label;
+    b.onclick = ()=>setRecency(key);
+    tabWrap.appendChild(b);
+  });
+  const wl = (WINDOWS.find(([k])=>k===state.recency)||[])[1] || '';
+  document.getElementById('windowSummary').textContent = state.recency==='all'
+    ? `${deals.length} deals, all time`
+    : `${base.length} added ${wl==='Today' ? 'today' : 'in the last '+wl.toLowerCase()} · ${deals.length} all-time`;
+}
+
 function pillEl(label, active, onclick, color){
   const p = document.createElement('button');
   p.className = 'pill'+(active?' active':'');
@@ -433,7 +451,9 @@ function renderFacets(base){
   base.forEach(d=>{ if(matchesFacets(d,{group:true})){ const g=(SECTORS[d.sector]||SECTORS.other).group; groupCounts[g]=(groupCounts[g]||0)+1; } });
   groupWrap.appendChild(pillEl(`All sectors (${base.filter(d=>matchesFacets(d,{group:true})).length})`, state.group==='all', ()=>setGroup('all')));
   Object.entries(GROUPS).forEach(([key,val])=>{
-    groupWrap.appendChild(pillEl(`${val.label} (${groupCounts[key]||0})`, state.group===key, ()=>setGroup(key), val.color));
+    const c = groupCounts[key]||0;
+    if(c===0 && state.group!==key) return; // consistent with sector/tag/type pills below
+    groupWrap.appendChild(pillEl(`${val.label} (${c})`, state.group===key, ()=>setGroup(key), val.color));
   });
 
   const sectorWrap = document.getElementById('sectorPills');
@@ -501,9 +521,9 @@ function render(){
   lastFiltered = filtered;
 
   renderFacets(base);
+  renderWindowTabs(base);
   syncUrl();
-  document.getElementById('resultsLine').textContent =
-    `${filtered.length} deal${filtered.length===1?'':'s'} · showing ${RECENCY_LABELS[state.recency]}`;
+  document.getElementById('resultsLine').textContent = `${filtered.length} shown`;
 
   const list = document.getElementById('dealList');
   const empty = document.getElementById('emptyState');
@@ -536,9 +556,10 @@ function render(){
     tr.style.setProperty('--row-accent', sec.color);
     const usd = fmtUSD(d.amountNum);
     const valUsd = fmtUSD(d.valuationNum);
+    // Plain text here, deliberately — the row's one click target opens the drawer;
+    // per-investor filtering lives there too, so a row never has two different meanings of "click".
     const investorsHtml = d.investorsList.length
-      ? d.investorsList.slice(0,3).map(inv=>`<span class="inv-chip" data-inv="${escapeAttr(inv)}">${escapeHtml(inv)}</span>`).join(', ')
-        + (d.investorsList.length>3 ? ` +${d.investorsList.length-3}` : '')
+      ? escapeHtml(d.investorsList.slice(0,3).join(', ')) + (d.investorsList.length>3 ? ` +${d.investorsList.length-3}` : '')
       : escapeHtml(d.investors||'—');
     tr.innerHTML = `
       <td>
@@ -562,11 +583,8 @@ function render(){
       </td>
     `;
     tr.style.cursor = 'pointer';
-    tr.addEventListener('click', (e)=>{ if(!e.target.closest('.inv-chip')) openDrawer(d); });
+    tr.addEventListener('click', ()=>openDrawer(d));
     list.appendChild(tr);
-  });
-  list.querySelectorAll('.inv-chip').forEach(chip=>{
-    chip.addEventListener('click', (e)=>{ e.stopPropagation(); document.getElementById('searchInput').value = chip.dataset.inv; render(); });
   });
 
   renderStats();
@@ -608,7 +626,10 @@ function escapeAttr(s){ return escapeHtml(s); }
 function openDrawer(d){
   const sec = SECTORS[d.sector] || SECTORS.other;
   const usd = fmtUSD(d.amountNum), valUsd = fmtUSD(d.valuationNum);
-  const investorsText = d.investorsList.length ? d.investorsList.map(escapeHtml).join(', ') : escapeHtml(d.investors||'—');
+  // Investor filtering lives here, not on the table row — one row, one click meaning.
+  const investorsHtml = d.investorsList.length
+    ? d.investorsList.map(inv=>`<span class="inv-chip" data-inv="${escapeAttr(inv)}">${escapeHtml(inv)}</span>`).join(', ')
+    : escapeHtml(d.investors||'—');
   document.getElementById('drawerBody').innerHTML = `
     <div class="drawer-sector" style="color:${sec.color}">${escapeHtml(sec.label)}${d.tags.length ? ' · ' + d.tags.map(t=>TAGS[t]||t).join(', ') : ''}</div>
     <h2 class="drawer-title">${escapeHtml(d.company)}</h2>
@@ -617,12 +638,19 @@ function openDrawer(d){
       <dt>Deal type</dt><dd>${escapeHtml(TYPES[d.type]||d.type||'—')}${d.stage ? ' · '+escapeHtml(d.stage) : ''}</dd>
       <dt>Amount</dt><dd>${usd ? usd + (d.amount ? ' ('+escapeHtml(d.amount)+')' : '') : escapeHtml(d.amount||'—')}</dd>
       ${valUsd ? `<dt>Valuation</dt><dd>${valUsd}${d.valuation ? ' ('+escapeHtml(d.valuation)+')' : ''}</dd>` : ''}
-      <dt>Investors</dt><dd>${investorsText}</dd>
+      <dt>Investors</dt><dd>${investorsHtml}</dd>
       <dt>Region</dt><dd>${escapeHtml(d.region||'—')}</dd>
       <dt>Announced</dt><dd>${fmtDate(d.date)}</dd>
     </dl>
     ${d.source ? `<a class="src-link" href="${escapeAttr(d.source)}" target="_blank" rel="noopener">Read the source ↗</a>` : ''}
   `;
+  document.getElementById('drawerBody').querySelectorAll('.inv-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.getElementById('searchInput').value = chip.dataset.inv;
+      closeDrawer();
+      render();
+    });
+  });
   document.getElementById('drawerOverlay').classList.add('show');
 }
 function closeDrawer(){ document.getElementById('drawerOverlay').classList.remove('show'); }
