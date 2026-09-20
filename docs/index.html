@@ -96,6 +96,13 @@
   .window-tab:hover{color:var(--ink);}
   .window-tab.active{color:var(--navy); border-bottom-color:var(--navy); font-weight:600;}
   .window-summary{font-size:12px; color:var(--ink-faint); padding-bottom:8px;}
+  .active-chip{
+    background:var(--navy-soft); border:1px solid var(--navy); color:var(--navy);
+    padding:5px 9px 5px 12px; border-radius:14px; font-family:var(--font-sans); font-size:12px; font-weight:500;
+    cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  }
+  .active-chip .x{font-size:13px; opacity:.65;}
+  .active-chip:hover .x{opacity:1;}
 
   /* ---- Detail drawer ---- */
   .drawer-overlay{position:fixed; inset:0; background:rgba(16,21,31,.35); opacity:0; visibility:hidden; transition:opacity .15s ease; z-index:50;}
@@ -194,6 +201,9 @@
 <div class="filters">
   <div class="filter-row">
     <input type="text" class="search-input" id="searchInput" placeholder="Search company, region…" oninput="render()">
+    <select class="sort-select" id="sectorSelect" onchange="onSectorSelect(this.value)"></select>
+    <select class="sort-select" id="tagSelect" onchange="onTagSelect(this.value)"></select>
+    <select class="sort-select" id="typeSelect" onchange="onTypeSelect(this.value)"></select>
     <select class="sort-select" id="sortSelect" onchange="render()">
       <option value="date">Newest first</option>
       <option value="amount">Largest deal</option>
@@ -202,10 +212,7 @@
     <button class="toolbar-btn" onclick="exportCsv()">Export CSV</button>
     <button class="toolbar-btn" id="copyLinkBtn" onclick="copyLink()">Copy link</button>
   </div>
-  <div class="filter-row" id="groupPills"></div>
-  <div class="filter-row" id="sectorPills"></div>
-  <div class="filter-row" id="tagPills"></div>
-  <div class="filter-row" id="typePills"></div>
+  <div class="filter-row" id="activeChips" style="display:none;"></div>
   <div class="results-line" id="resultsLine"></div>
 </div>
 
@@ -404,10 +411,18 @@ function windowedDeals(){
   return deals.filter(d => d.createdAt && new Date(d.createdAt) >= cutoff);
 }
 function setRecency(v){ state.recency=v; render(); }
-function setGroup(key){ state.group=key; state.sector='all'; render(); }
-function setSector(key){ state.sector=key; render(); }
-function toggleTag(key){ state.tags.has(key) ? state.tags.delete(key) : state.tags.add(key); render(); }
-function setType(key){ state.type=key; render(); }
+
+// Dropdown value 'all' | 'g:<groupKey>' (whole industry) | 's:<sectorKey>' (one sector).
+function onSectorSelect(v){
+  if(v==='all'){ state.group='all'; state.sector='all'; }
+  else if(v.startsWith('g:')){ state.group=v.slice(2); state.sector='all'; }
+  else { const sKey=v.slice(2); state.sector=sKey; state.group=(SECTORS[sKey]||{}).group||'all'; }
+  render();
+}
+// state.tags stays a Set (matchesFacets already reads it that way) — the dropdown just keeps it at size 0 or 1.
+function onTagSelect(v){ state.tags = v==='all' ? new Set() : new Set([v]); render(); }
+function onTypeSelect(v){ state.type = v; render(); }
+function clearFilters(){ state.group='all'; state.sector='all'; state.tags=new Set(); state.type='all'; render(); }
 
 /** skip* lets a facet's own pill counts reflect every OTHER active filter, not itself. */
 function matchesFacets(d, skip={}){
@@ -436,59 +451,88 @@ function renderWindowTabs(base){
     : `${base.length} added ${wl==='Today' ? 'today' : 'in the last '+wl.toLowerCase()} · ${deals.length} all-time`;
 }
 
-function pillEl(label, active, onclick, color){
-  const p = document.createElement('button');
-  p.className = 'pill'+(active?' active':'');
-  p.innerHTML = color ? `<span class="sw" style="background:${color}"></span>${escapeHtml(label)}` : escapeHtml(label);
-  p.onclick = onclick;
-  return p;
+/**
+ * Sectors as a single <select> with an <optgroup> per industry — the same 6-group /
+ * 27-sector structure the pills used, just collapsed: closed by default instead of
+ * exposing every sector as its own on-page button. "All <Industry>" sits at the top of
+ * each group so picking the industry alone is still one click away.
+ */
+function buildSectorOptions(base){
+  const groupCounts = {}, sectorCounts = {};
+  base.forEach(d=>{
+    if(!matchesFacets(d,{group:true,sector:true})) return;
+    const g = (SECTORS[d.sector]||SECTORS.other).group;
+    groupCounts[g] = (groupCounts[g]||0)+1;
+    sectorCounts[d.sector] = (sectorCounts[d.sector]||0)+1;
+  });
+  const sel = document.getElementById('sectorSelect');
+  sel.innerHTML = '';
+  const total = Object.values(groupCounts).reduce((a,b)=>a+b,0);
+  sel.appendChild(new Option(`All sectors (${total})`, 'all'));
+  Object.entries(GROUPS).forEach(([gKey,gVal])=>{
+    if(gKey==='other') return; // folded into a plain option below, not its own one-item group
+    const og = document.createElement('optgroup');
+    og.label = `${gVal.label} (${groupCounts[gKey]||0})`;
+    og.appendChild(new Option(`All ${gVal.label}`, 'g:'+gKey));
+    Object.entries(SECTORS).filter(([,v])=>v.group===gKey).forEach(([sKey,sVal])=>{
+      og.appendChild(new Option(`${sVal.label} (${sectorCounts[sKey]||0})`, 's:'+sKey));
+    });
+    sel.appendChild(og);
+  });
+  sel.appendChild(new Option(`Other (${groupCounts.other||0})`, 's:other'));
+  sel.value = state.sector!=='all' ? 's:'+state.sector : (state.group!=='all' ? 'g:'+state.group : 'all');
 }
 
-function renderFacets(base){
-  const groupWrap = document.getElementById('groupPills');
-  groupWrap.innerHTML = '';
-  const groupCounts = {};
-  base.forEach(d=>{ if(matchesFacets(d,{group:true})){ const g=(SECTORS[d.sector]||SECTORS.other).group; groupCounts[g]=(groupCounts[g]||0)+1; } });
-  groupWrap.appendChild(pillEl(`All sectors (${base.filter(d=>matchesFacets(d,{group:true})).length})`, state.group==='all', ()=>setGroup('all')));
-  Object.entries(GROUPS).forEach(([key,val])=>{
-    const c = groupCounts[key]||0;
-    if(c===0 && state.group!==key) return; // consistent with sector/tag/type pills below
-    groupWrap.appendChild(pillEl(`${val.label} (${c})`, state.group===key, ()=>setGroup(key), val.color));
-  });
-
-  const sectorWrap = document.getElementById('sectorPills');
-  sectorWrap.innerHTML = '';
-  if(state.group!=='all'){
-    const subCounts = {};
-    base.forEach(d=>{ if(matchesFacets(d,{sector:true})) subCounts[d.sector]=(subCounts[d.sector]||0)+1; });
-    const inGroup = Object.entries(SECTORS).filter(([,v])=>v.group===state.group);
-    const subAll = inGroup.reduce((s,[k])=>s+(subCounts[k]||0),0);
-    sectorWrap.appendChild(pillEl(`All ${GROUPS[state.group].label} (${subAll})`, state.sector==='all', ()=>setSector('all')));
-    inGroup.forEach(([key,val])=>{
-      const c = subCounts[key]||0;
-      if(c===0 && state.sector!==key) return;
-      sectorWrap.appendChild(pillEl(`${val.short} (${c})`, state.sector===key, ()=>setSector(key), val.color));
-    });
-  }
-
-  const tagWrap = document.getElementById('tagPills');
-  tagWrap.innerHTML = '';
+function buildTagOptions(base){
+  const counts = {};
+  base.forEach(d=>{ if(matchesFacets(d,{tags:true})) d.tags.forEach(t=>{ counts[t]=(counts[t]||0)+1; }); });
+  const sel = document.getElementById('tagSelect');
+  sel.innerHTML = '';
+  sel.appendChild(new Option('All technologies', 'all'));
   Object.entries(TAGS).forEach(([key,label])=>{
-    const c = base.filter(d=>matchesFacets(d,{tags:true}) && d.tags.includes(key)).length;
-    if(c===0 && !state.tags.has(key)) return;
-    tagWrap.appendChild(pillEl(`#${label} (${c})`, state.tags.has(key), ()=>toggleTag(key)));
+    sel.appendChild(new Option(`#${label} (${counts[key]||0})`, key));
   });
+  sel.value = state.tags.size ? [...state.tags][0] : 'all';
+}
 
-  const typeWrap = document.getElementById('typePills');
-  typeWrap.innerHTML = '';
-  const typeCounts = {};
-  base.forEach(d=>{ if(matchesFacets(d,{type:true}) && d.type) typeCounts[d.type]=(typeCounts[d.type]||0)+1; });
-  typeWrap.appendChild(pillEl(`All deal types (${Object.values(typeCounts).reduce((a,b)=>a+b,0)})`, state.type==='all', ()=>setType('all')));
+function buildTypeOptions(base){
+  const counts = {};
+  base.forEach(d=>{ if(matchesFacets(d,{type:true}) && d.type) counts[d.type]=(counts[d.type]||0)+1; });
+  const sel = document.getElementById('typeSelect');
+  sel.innerHTML = '';
+  const total = Object.values(counts).reduce((a,b)=>a+b,0);
+  sel.appendChild(new Option(`All deal types (${total})`, 'all'));
   Object.entries(TYPES).forEach(([key,label])=>{
-    const c = typeCounts[key]||0;
-    if(c===0 && state.type!==key) return;
-    typeWrap.appendChild(pillEl(`${label} (${c})`, state.type===key, ()=>setType(key)));
+    sel.appendChild(new Option(`${label} (${counts[key]||0})`, key));
   });
+  sel.value = state.type;
+}
+
+/** Only visible when a filter is actually active — this is the "what am I looking at" trail
+ *  that replaces the always-on pill rows. */
+function renderActiveChips(){
+  const wrap = document.getElementById('activeChips');
+  wrap.innerHTML = '';
+  const chips = [];
+  if(state.sector!=='all') chips.push([(SECTORS[state.sector]||{}).label || state.sector, ()=>{ state.sector='all'; state.group='all'; render(); }]);
+  else if(state.group!=='all') chips.push([GROUPS[state.group].label, ()=>{ state.group='all'; render(); }]);
+  if(state.tags.size) chips.push(['#'+(TAGS[[...state.tags][0]]||[...state.tags][0]), ()=>{ state.tags=new Set(); render(); }]);
+  if(state.type!=='all') chips.push([TYPES[state.type]||state.type, ()=>{ state.type='all'; render(); }]);
+
+  if(!chips.length){ wrap.style.display='none'; return; }
+  wrap.style.display='flex';
+  chips.forEach(([label,onRemove])=>{
+    const c = document.createElement('button');
+    c.className = 'active-chip';
+    c.innerHTML = `${escapeHtml(label)}<span class="x" aria-hidden="true">✕</span>`;
+    c.onclick = onRemove;
+    wrap.appendChild(c);
+  });
+  const clear = document.createElement('button');
+  clear.className = 'toolbar-btn';
+  clear.textContent = 'Clear all';
+  clear.onclick = clearFilters;
+  wrap.appendChild(clear);
 }
 
 function dateBucketLabel(dateStr){
@@ -520,7 +564,10 @@ function render(){
   });
   lastFiltered = filtered;
 
-  renderFacets(base);
+  buildSectorOptions(base);
+  buildTagOptions(base);
+  buildTypeOptions(base);
+  renderActiveChips();
   renderWindowTabs(base);
   syncUrl();
   document.getElementById('resultsLine').textContent = `${filtered.length} shown`;
